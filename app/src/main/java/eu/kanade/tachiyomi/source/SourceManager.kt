@@ -3,6 +3,8 @@ package eu.kanade.tachiyomi.source
 import android.content.Context
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.extension.ExtensionManager
+import eu.kanade.tachiyomi.source.gallery.GallerySource
+import eu.kanade.tachiyomi.source.gallery.local.LocalGallerySource
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
@@ -32,10 +34,20 @@ class SourceManager(
 
     private val sourcesMapFlow = MutableStateFlow(ConcurrentHashMap<Long, Source>())
 
+    private val gallerySourceMapFlow = MutableStateFlow(
+        ConcurrentHashMap<Long, GallerySource>(
+            mapOf(
+                LocalGallerySource.ID to LocalGallerySource(context),
+            ),
+        ),
+    )
+
     private val stubSourcesMap = ConcurrentHashMap<Long, StubSource>()
 
-    val catalogueSources: Flow<List<CatalogueSource>> = sourcesMapFlow.map { it.values.filterIsInstance<CatalogueSource>() }
-    val onlineSources: Flow<List<HttpSource>> = catalogueSources.map { it.filterIsInstance<HttpSource>() }
+    val catalogueSources: Flow<List<CatalogueSource>> =
+        sourcesMapFlow.map { it.values.filterIsInstance<CatalogueSource>() }
+    val onlineSources: Flow<List<HttpSource>> =
+        catalogueSources.map { it.filterIsInstance<HttpSource>() }
 
     private val delegatedSources = listOf(
         DelegatedSource(
@@ -64,11 +76,13 @@ class SourceManager(
         scope.launch {
             extensionManager.installedExtensionsFlow
                 .collectLatest { extensions ->
-                    val mutableMap = ConcurrentHashMap<Long, Source>(mapOf(LocalSource.ID to LocalSource(context)))
+                    val mutableMap =
+                        ConcurrentHashMap<Long, Source>(mapOf(LocalSource.ID to LocalSource(context)))
                     extensions.forEach { extension ->
                         extension.sources.forEach {
                             mutableMap[it.id] = it
-                            delegatedSources[it.id]?.delegatedHttpSource?.delegate = it as? HttpSource
+                            delegatedSources[it.id]?.delegatedHttpSource?.delegate =
+                                it as? HttpSource
 //                            registerStubSource(it)
                         }
                     }
@@ -89,6 +103,10 @@ class SourceManager(
 
     fun get(sourceKey: Long): Source? {
         return sourcesMapFlow.value[sourceKey]
+    }
+
+    fun getGallerySource(sourceKey: Long = LocalGallerySource.ID): GallerySource? {
+        return gallerySourceMapFlow.value[sourceKey]
     }
 
     fun getOrStub(sourceKey: Long): Source {

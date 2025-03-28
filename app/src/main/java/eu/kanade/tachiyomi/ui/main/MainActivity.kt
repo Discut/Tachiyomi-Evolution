@@ -92,6 +92,7 @@ import eu.kanade.tachiyomi.ui.base.SmallToolbarInterface
 import eu.kanade.tachiyomi.ui.base.activity.BaseActivity
 import eu.kanade.tachiyomi.ui.base.controller.BaseController
 import eu.kanade.tachiyomi.ui.base.controller.DialogController
+import eu.kanade.tachiyomi.ui.gallery.GalleryController
 import eu.kanade.tachiyomi.ui.library.LibraryController
 import eu.kanade.tachiyomi.ui.manga.MangaDetailsController
 import eu.kanade.tachiyomi.ui.more.AboutController
@@ -368,6 +369,15 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
             }
             true
         }
+        nav.getItemView(R.id.nav_gallery)?.setOnLongClickListener {
+            nav.selectedItemId = R.id.nav_gallery
+            nav.post {
+                val controller =
+                    router.backstack.firstOrNull()?.controller as? BottomSheetController
+                controller?.showSheet()
+            }
+            true
+        }
         for (id in listOf(R.id.nav_recents, R.id.nav_browse)) {
             nav.getItemView(id)?.setOnLongClickListener {
                 nav.selectedItemId = id
@@ -437,6 +447,7 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
                 when (router.backstack.firstOrNull()?.controller) {
                     is RecentsController -> R.id.nav_recents
                     is BrowseController -> R.id.nav_browse
+                    is GalleryController -> R.id.nav_gallery
                     else -> R.id.nav_library
                 }
         }
@@ -460,6 +471,7 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
                     when (id) {
                         R.id.nav_library -> LibraryController()
                         R.id.nav_recents -> RecentsController()
+                        R.id.nav_gallery -> GalleryController()
                         else -> BrowseController()
                     },
                     id,
@@ -997,6 +1009,7 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
         }
         when (intent.action) {
             SHORTCUT_LIBRARY -> nav.selectedItemId = R.id.nav_library
+            SHORTCUT_GALLERY -> nav.selectedItemId = R.id.nav_gallery
             SHORTCUT_RECENTLY_UPDATED, SHORTCUT_RECENTLY_READ, SHORTCUT_RECENTS -> {
                 if (nav.selectedItemId != R.id.nav_recents) {
                     nav.selectedItemId = R.id.nav_recents
@@ -1550,6 +1563,7 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
         // Shortcut actions
         const val SHORTCUT_LIBRARY = "eu.kanade.tachiyomi.SHOW_LIBRARY"
         const val SHORTCUT_RECENTS = "eu.kanade.tachiyomi.SHOW_RECENTS"
+        const val SHORTCUT_GALLERY = "eu.kanade.tachiyomi.SHOW_GALLERY"
         const val SHORTCUT_RECENTLY_UPDATED = "eu.kanade.tachiyomi.SHOW_RECENTLY_UPDATED"
         const val SHORTCUT_RECENTLY_READ = "eu.kanade.tachiyomi.SHOW_RECENTLY_READ"
         const val SHORTCUT_BROWSE = "eu.kanade.tachiyomi.SHOW_BROWSE"

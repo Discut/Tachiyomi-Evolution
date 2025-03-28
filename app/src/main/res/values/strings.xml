@@ -1205,4 +1205,11 @@
     <string name="wifi">Wi-Fi</string>
     <string name="auto_play">Auto play</string>
     <string name="use_auto_play_progress">Use auto play progress bar</string>
+
+
+    <!-- Gallery -->
+    <string name="local_gallery_source">Local Gallery source</string>
+    <string name="gallery">Gallery</string>
+
+
 </resources>

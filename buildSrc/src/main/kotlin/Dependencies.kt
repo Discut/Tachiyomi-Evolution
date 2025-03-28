@@ -2,7 +2,7 @@ import java.util.Locale
 
 object AndroidVersions {
     const val compileSdk = 34
-    const val minSdk = 23
+    const val minSdk = 28
     const val targetSdk = 34
     const val versionCode = 111
     const val versionName = "1.8.0-support-gallery"

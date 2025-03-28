@@ -380,6 +380,118 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
     }
 
     /**
+     * Update the views in appbar based on its current Y position
+     *
+     * @param recyclerOrNested used to determine how far it has scrolled down, if it has not scrolled
+     * past the app bar's height, match the Y to the recyclerView's offset
+     * @param cancelAnim if true, cancel the current snap animation
+     */
+    fun updateAppBarAfterY(offsett: Int, /*scrollView: ScrollingView?,*/ cancelAnim: Boolean = true) {
+        if (cancelAnim) {
+            yAnimator?.cancel()
+        }
+        if (lockYPos) return
+        val offset = offsett
+        val bigHeight = bigView?.height ?: 0
+        val realHeight = preLayoutHeightWhileSearching + paddingTop
+        val tabHeight = if (tabsFrameLayout?.isVisible == true) 48.dpToPx else 0
+        val shortH = if (toolbarMode != ToolbarState.EXPANDED || compactSearchMode) 0f else compactAppBarHeight
+        val smallHeight = -realHeight + shortH + tabHeight
+        val newY = when {
+            // for smaller devices, when search is active, we want to shrink the app bar and never
+            // extend it pass the compact state
+            toolbarMode == ToolbarState.EXPANDED && compactSearchMode -> {
+                MathUtils.clamp(
+                    translationY,
+                    -realHeight.toFloat() + top + if (context.isTablet()) minTabletHeight else 0,
+                    -realHeight.toFloat() + top + minTabletHeight,
+                )
+            }
+            // for regular compact modes, no need to clamp, setTranslationY will take care of it
+            toolbarMode != ToolbarState.EXPANDED -> {
+                translationY
+            }
+            // if the recycler hasn't scrolled past the app bars height...
+            offset < realHeight - shortH - tabHeight -> {
+                -offset.toFloat()
+            }
+            else -> {
+                MathUtils.clamp(
+                    translationY,
+                    -realHeight.toFloat() + top + minTabletHeight,
+                    max(
+                        smallHeight,
+                        if (offset > realHeight - shortH - tabHeight) {
+                            smallHeight
+                        } else {
+                            min(
+                                -offset.toFloat(),
+                                0f,
+                            )
+                        },
+                    ) + top.toFloat(),
+                )
+            }
+        }
+
+        translationY = newY
+        mainToolbar?.let { mainToolbar ->
+            mainToolbar.translationY = when {
+                toolbarMode != ToolbarState.EXPANDED -> 0f
+                -newY <= bigHeight -> max(-newY, 0f)
+                else -> bigHeight.toFloat()
+            }
+        }
+        if (toolbarMode != ToolbarState.EXPANDED || compactSearchMode) {
+            if (compactSearchMode && toolbarMode == ToolbarState.EXPANDED) {
+                bigView?.alpha = 0f
+                mainToolbar?.alpha = 0f
+                cardFrame?.backgroundColor = null
+            } else {
+                mainToolbar?.alpha = 1f
+            }
+            useSearchToolbarForMenu(compactSearchMode || offset > realHeight - shortH - tabHeight)
+            return
+        }
+        // If toolbar is expanded, we want to fade out the big view, then later the main toolbar
+        val alpha =
+            (bigHeight + newY * 2) / (bigHeight) + 0.45f // (realHeight.toFloat() + newY * 5) / realHeight.toFloat() + .33f
+        bigView?.alpha = MathUtils.clamp(if (alpha.isNaN()) 1f else alpha, 0f, 1f)
+        val toolbarTextView = mainToolbar?.toolbarTitle ?: return
+        toolbarTextView.setTextColorAlpha(
+            (
+                MathUtils.clamp(
+                    (1 - ((if (alpha.isNaN()) 1f else alpha) + 0.95f)) * 2,
+                    0f,
+                    1f,
+                ) * 255
+                ).roundToInt(),
+        )
+        val mainToolbar = mainToolbar ?: return
+        mainToolbar.alpha = MathUtils.clamp(
+            (mainToolbar.bottom + mainToolbar.translationY + y - paddingTop) / mainToolbar.height,
+            0f,
+            1f,
+        )
+        val mainActivity = mainActivity ?: return
+        val useSearchToolbar = mainToolbar.alpha <= 0.025f
+        val idle = RecyclerView.SCROLL_STATE_IDLE
+        /*val state = when (scrollView) {
+            is RecyclerView -> scrollView.scrollState
+            is StatefulNestedScrollView -> if (scrollView.hasStopped) idle else RecyclerView.SCROLL_STATE_DRAGGING
+            else -> idle
+        }
+        if (if (useSearchToolbar) {
+                -y >= height || (state <= idle) || context.isTablet()
+            } else {
+                mainActivity.currentToolbar == searchToolbar
+            }
+        ) {
+            useSearchToolbarForMenu(useSearchToolbar)
+        }*/
+    }
+
+    /**
      * Snap Appbar to hide the entire appbar or show the smaller toolbar
      *
      * Only snaps if the [scrollView] has scrolled farther than the current app bar's height

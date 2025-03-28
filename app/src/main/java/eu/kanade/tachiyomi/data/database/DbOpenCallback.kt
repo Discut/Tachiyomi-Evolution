@@ -4,9 +4,15 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteOpenHelper
 import eu.kanade.tachiyomi.data.database.tables.CategoryTable
 import eu.kanade.tachiyomi.data.database.tables.ChapterTable
+import eu.kanade.tachiyomi.data.database.tables.DiffGroupImageTable
+import eu.kanade.tachiyomi.data.database.tables.DiffGroupTable
 import eu.kanade.tachiyomi.data.database.tables.HistoryTable
+import eu.kanade.tachiyomi.data.database.tables.ImageTable
+import eu.kanade.tachiyomi.data.database.tables.ImageTagTable
 import eu.kanade.tachiyomi.data.database.tables.MangaCategoryTable
 import eu.kanade.tachiyomi.data.database.tables.MangaTable
+import eu.kanade.tachiyomi.data.database.tables.TagTable
+import eu.kanade.tachiyomi.data.database.tables.TagTypeTable
 import eu.kanade.tachiyomi.data.database.tables.TrackTable
 
 class DbOpenCallback : SupportSQLiteOpenHelper.Callback(DATABASE_VERSION) {
@@ -50,6 +56,21 @@ class DbOpenCallback : SupportSQLiteOpenHelper.Callback(DATABASE_VERSION) {
         execSQL(ChapterTable.createMangaIdIndexQuery)
         execSQL(ChapterTable.createUnreadChaptersIndexQuery)
         execSQL(HistoryTable.createChapterIdIndexQuery)
+
+        // about Gallery
+        execSQL(ImageTable.createTableQuery)
+        execSQL(TagTypeTable.createTableQuery)
+        execSQL(TagTable.createTableQuery)
+        execSQL(ImageTagTable.createTableQuery)
+        execSQL(DiffGroupTable.createTableQuery)
+        execSQL(DiffGroupImageTable.createTableQuery)
+        // And initData
+        execSQL(TagTable.createInitData)
+        // And create index
+        execSQL(ImageTable.createIndexSql)
+        execSQL(TagTable.createIndexSql)
+        execSQL(DiffGroupTable.createIndexSql)
+        execSQL(DiffGroupImageTable.createIndexSql)
     }
 
     override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {

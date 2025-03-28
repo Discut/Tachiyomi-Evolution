@@ -88,9 +88,12 @@ import eu.kanade.tachiyomi.ui.main.SearchActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderViewModel.SetAsCoverResult.AddToLibraryFirst
 import eu.kanade.tachiyomi.ui.reader.ReaderViewModel.SetAsCoverResult.Error
 import eu.kanade.tachiyomi.ui.reader.ReaderViewModel.SetAsCoverResult.Success
+import eu.kanade.tachiyomi.ui.reader.model.READER_MODE_KEY
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
+import eu.kanade.tachiyomi.ui.reader.model.ReaderMode
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
+import eu.kanade.tachiyomi.ui.reader.model.getReaderMode
 import eu.kanade.tachiyomi.ui.reader.settings.OrientationType
 import eu.kanade.tachiyomi.ui.reader.settings.PageLayout
 import eu.kanade.tachiyomi.ui.reader.settings.ReaderBottomButton
@@ -166,6 +169,11 @@ import kotlin.math.roundToInt
  * viewers, to which calls from the view model or UI events are delegated.
  */
 class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
+
+    /**
+     * 阅读器阅读模式
+     */
+    var mode: ReaderMode = ReaderMode.MANGA
 
     val viewModel by viewModels<ReaderViewModel>()
 
@@ -251,6 +259,17 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             val intent = Intent(context, ReaderActivity::class.java)
             intent.putExtra("manga", manga.id)
             intent.putExtra("chapter", chapter.id)
+            intent.putExtra(READER_MODE_KEY, ReaderMode.MANGA.key)
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            return intent
+        }
+
+        fun newIntentToGallery(context: Context): Intent {
+            MainActivity.chapterIdToExitTo = 0L
+            val intent = Intent(context, ReaderActivity::class.java)
+
+            intent.putExtra(READER_MODE_KEY, ReaderMode.GALLERY.key)
+
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
             return intent
         }
@@ -272,6 +291,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
      * Called when the activity is created. Initializes the view model and configuration.
      */
     override fun onCreate(savedInstanceState: Bundle?) {
+        mode = intent.extras.getReaderMode()
         // Setup shared element transitions
         if (intent.extras?.getString(TRANSITION_NAME) != null) {
             window.requestFeature(Window.FEATURE_ACTIVITY_TRANSITIONS)

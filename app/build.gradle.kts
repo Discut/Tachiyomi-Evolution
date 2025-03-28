@@ -246,6 +246,7 @@ dependencies {
     implementation("io.coil-kt:coil:$coilVersion")
     implementation("io.coil-kt:coil-gif:$coilVersion")
     implementation("io.coil-kt:coil-svg:$coilVersion")
+    implementation("io.coil-kt:coil-compose:$coilVersion")
 
     // Logging
     implementation("com.jakewharton.timber:timber:4.7.1")
@@ -300,6 +301,10 @@ dependencies {
 
     // number picker
     implementation("com.chargemap.compose:numberpicker:1.0.3")
+
+    // get image mate
+    implementation("com.drewnoakes:metadata-extractor:2.16.0")
+
 }
 
 tasks {
