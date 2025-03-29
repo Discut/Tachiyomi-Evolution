@@ -10,4 +10,5 @@ class DiffImage(
     url: String = "",
     width: Int,
     height: Int,
-) : SImage(index, id, createdAt, modifiedAt, fileSize, name, url, width, height)
+    source: Long,
+) : SImage(index, id, createdAt, modifiedAt, fileSize, name, url, width, height, source)

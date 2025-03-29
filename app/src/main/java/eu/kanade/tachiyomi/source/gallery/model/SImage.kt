@@ -12,6 +12,7 @@ open class SImage(
     val url: String = "",
     val width: Int,
     val height: Int,
+    val source: Long,
 ) : Loader() {
     val number: Int
         get() = index + 1
@@ -27,4 +28,5 @@ fun SImage.toDBImage() = DBImage().also {
     it.modifiedAt = modifiedAt
     it.width = width
     it.height = height
+    it.source = source
 }

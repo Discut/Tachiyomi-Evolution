@@ -109,6 +109,8 @@ class SourceManager(
         return gallerySourceMapFlow.value[sourceKey]
     }
 
+    fun getAllGallerySources() = gallerySourceMapFlow.value.values
+
     fun getOrStub(sourceKey: Long): Source {
         return sourcesMapFlow.value[sourceKey] ?: stubSourcesMap.getOrPut(sourceKey) {
             runBlocking { StubSource(sourceKey) }

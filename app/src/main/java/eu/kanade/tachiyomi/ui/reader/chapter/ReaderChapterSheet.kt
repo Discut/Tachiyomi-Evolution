@@ -21,6 +21,7 @@ import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.databinding.ReaderChaptersSheetBinding
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.ReaderViewModel
+import eu.kanade.tachiyomi.ui.reader.model.ReaderMode
 import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.getResourceColor
 import eu.kanade.tachiyomi.util.system.isInNightMode
@@ -47,6 +48,7 @@ class ReaderChapterSheet @JvmOverloads constructor(context: Context, attrs: Attr
     var loadingPos = 0
     lateinit var binding: ReaderChaptersSheetBinding
     var lastScale = 1f
+    private var mode: ReaderMode = ReaderMode.MANGA
 
     override fun onFinishInflate() {
         super.onFinishInflate()
@@ -117,7 +119,7 @@ class ReaderChapterSheet @JvmOverloads constructor(context: Context, attrs: Attr
                     if (state == BottomSheetBehavior.STATE_COLLAPSED) {
                         sheetBehavior?.isHideable = false
                         (binding.chapterRecycler.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(
-                            adapter?.getPosition(viewModel.getCurrentChapter()?.chapter?.id ?: 0L)
+                            adapter?.getPosition(viewModel.getCurrentChapter()?.chapterId ?: 0L)
                                 ?: 0,
                             binding.chapterRecycler.height / 2 - 30.dpToPx,
                         )
@@ -184,7 +186,7 @@ class ReaderChapterSheet @JvmOverloads constructor(context: Context, attrs: Attr
             if (!sheetBehavior.isExpanded() || activity.isLoading) {
                 false
             } else {
-                if (item.chapter.id != viewModel.getCurrentChapter()?.chapter?.id) {
+                if (item.chapter.id != viewModel.getCurrentChapter()?.chapterId) {
                     activity.binding.readerNav.leftChapter.isInvisible = true
                     activity.binding.readerNav.rightChapter.isInvisible = true
                     activity.isScrollingThroughPagesOrChapters = true
@@ -266,7 +268,7 @@ class ReaderChapterSheet @JvmOverloads constructor(context: Context, attrs: Attr
             itemAdapter.add(chapters)
 
             (binding.chapterRecycler.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(
-                adapter?.getPosition(viewModel.getCurrentChapter()?.chapter?.id ?: 0L) ?: 0,
+                adapter?.getPosition(viewModel.getCurrentChapter()?.chapterId ?: 0L) ?: 0,
                 binding.chapterRecycler.height / 2 - 30.dpToPx,
             )
         }

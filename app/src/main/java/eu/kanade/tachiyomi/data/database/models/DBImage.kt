@@ -23,6 +23,7 @@ class DBImage {
     var height: Int = 1
     var checksum: String? = null
     var exifJson: String? = null
+    var source: Long = 0
     var createdAt: String = ""
     var modifiedAt: String = ""
 }

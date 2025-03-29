@@ -284,7 +284,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer {
     private fun getItem(position: Int, currentChapter: ReaderChapter?): Pair<Any, Any?>? {
         return adapter.joinedItems.firstOrNull {
             val readerPage = it.first as? ReaderPage ?: return@firstOrNull false
-            readerPage.index == position && readerPage.chapter.chapter.id == currentChapter?.chapter?.id
+            readerPage.index == position && readerPage.chapter.chapterId == currentChapter?.chapterId
         }
     }
 

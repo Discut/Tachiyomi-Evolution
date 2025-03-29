@@ -33,7 +33,7 @@ class LocalGallerySource(private val context: Context) : GallerySource, Unmetere
         private fun getBaseDirectories(context: Context): List<File> {
             val basePath = listOf(
                 context.getString(R.string.app_name) + File.separator + "gallery",
-                "Pictures" + File.separator + "JHentai",
+                "Pictures" + File.separator + "JHentaib",
             )
             return DiskUtil.getExternalStorages(context).map { c ->
                 basePath.map { File(c.absolutePath, it) }
@@ -66,6 +66,7 @@ class LocalGallerySource(private val context: Context) : GallerySource, Unmetere
                 url = file.absolutePath,
                 width = width,
                 height = height,
+                source = ID,
             )
         }.filter { it.height > 0 && it.width > 0 }.toList()
     }
@@ -112,6 +113,7 @@ class LocalGallerySource(private val context: Context) : GallerySource, Unmetere
                     url = file.absolutePath,
                     width = width,
                     height = height,
+                    source = ID,
                 )
             }.toList(),
         )

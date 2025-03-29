@@ -17,7 +17,7 @@ import java.io.File
  * Loader used to load a chapter from the downloaded chapters.
  */
 class DownloadPageLoader(
-    private val chapter: ReaderChapter,
+    private val chapter: ReaderChapter.MangaChapter,
     private val manga: Manga,
     private val source: Source,
     private val downloadManager: DownloadManager,

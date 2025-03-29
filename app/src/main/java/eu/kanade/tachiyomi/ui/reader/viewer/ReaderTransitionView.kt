@@ -17,6 +17,7 @@ import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.databinding.ReaderTransitionViewBinding
 import eu.kanade.tachiyomi.ui.reader.model.ChapterTransition
+import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.util.chapter.ChapterUtil.Companion.preferredChapterName
 import eu.kanade.tachiyomi.util.system.contextCompatDrawable
 import eu.kanade.tachiyomi.util.system.dpToPx
@@ -56,10 +57,12 @@ class ReaderTransitionView @JvmOverloads constructor(context: Context, attrs: At
         val prevChapter = transition.to
 
         binding.lowerText.isVisible = prevChapter != null
-        if (prevChapter != null) {
+        if (prevChapter != null && prevChapter is ReaderChapter.MangaChapter) {
+            val from = transition.from as ReaderChapter.MangaChapter
+
             binding.upperText.textAlignment = TEXT_ALIGNMENT_TEXT_START
             val isPrevDownloaded = downloadManager.isChapterDownloaded(prevChapter.chapter, manga)
-            val isCurrentDownloaded = downloadManager.isChapterDownloaded(transition.from.chapter, manga)
+            val isCurrentDownloaded = downloadManager.isChapterDownloaded(from.chapter, manga)
             binding.upperText.text = buildSpannedString {
                 bold { append(context.getString(R.string.previous_title)) }
                 append("\n${prevChapter.chapter.preferredChapterName(context, manga, preferences)}")
@@ -67,7 +70,7 @@ class ReaderTransitionView @JvmOverloads constructor(context: Context, attrs: At
             }
             binding.lowerText.text = buildSpannedString {
                 bold { append(context.getString(R.string.current_chapter)) }
-                val name = transition.from.chapter.preferredChapterName(context, manga, preferences)
+                val name = from.chapter.preferredChapterName(context, manga, preferences)
                 append("\n$name")
             }
         } else {
@@ -87,13 +90,15 @@ class ReaderTransitionView @JvmOverloads constructor(context: Context, attrs: At
         val nextChapter = transition.to
 
         binding.lowerText.isVisible = nextChapter != null
-        if (nextChapter != null) {
+        if (nextChapter != null && nextChapter is ReaderChapter.MangaChapter) {
+            val from = transition.from as ReaderChapter.MangaChapter
+
             binding.upperText.textAlignment = TEXT_ALIGNMENT_TEXT_START
-            val isCurrentDownloaded = downloadManager.isChapterDownloaded(transition.from.chapter, manga)
+            val isCurrentDownloaded = downloadManager.isChapterDownloaded(from.chapter, manga)
             val isNextDownloaded = downloadManager.isChapterDownloaded(nextChapter.chapter, manga)
             binding.upperText.text = buildSpannedString {
                 bold { append(context.getString(R.string.finished_chapter)) }
-                val name = transition.from.chapter.preferredChapterName(context, manga, preferences)
+                val name = from.chapter.preferredChapterName(context, manga, preferences)
                 append("\n$name")
             }
             binding.lowerText.text = buildSpannedString {

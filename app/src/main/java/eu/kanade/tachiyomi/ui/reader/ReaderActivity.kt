@@ -37,7 +37,6 @@ import android.view.animation.AnimationUtils
 import android.widget.TextView
 import androidx.activity.BackEventCompat
 import androidx.activity.OnBackPressedCallback
-import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.content.ContextCompat
@@ -80,6 +79,7 @@ import eu.kanade.tachiyomi.data.preference.asImmediateFlowIn
 import eu.kanade.tachiyomi.data.preference.toggle
 import eu.kanade.tachiyomi.data.track.TrackService
 import eu.kanade.tachiyomi.databinding.ReaderActivityBinding
+import eu.kanade.tachiyomi.model.GalleryBo
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.ui.base.MaterialMenuSheet
 import eu.kanade.tachiyomi.ui.base.activity.BaseActivity
@@ -250,6 +250,8 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         const val SHIFT_DOUBLE_PAGES = "shiftingDoublePages"
         const val SHIFTED_PAGE_INDEX = "shiftedPageIndex"
         const val SHIFTED_CHAP_INDEX = "shiftedChapterIndex"
+        const val GALLERY_ID = "gallery_id"
+        const val TARGET_IMAGE_ID = "target_image_id"
 
         const val TRANSITION_NAME = "${BuildConfig.APPLICATION_ID}.TRANSITION_NAME"
         const val VISIBLE_CHAPTERS = "${BuildConfig.APPLICATION_ID}.VISIBLE_CHAPTERS"
@@ -264,11 +266,13 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             return intent
         }
 
-        fun newIntentToGallery(context: Context): Intent {
+        fun newIntentToGallery(context: Context, galleryId: Long, targetImage: Long): Intent {
             MainActivity.chapterIdToExitTo = 0L
             val intent = Intent(context, ReaderActivity::class.java)
 
             intent.putExtra(READER_MODE_KEY, ReaderMode.GALLERY.key)
+            intent.putExtra(GALLERY_ID, galleryId)
+            intent.putExtra(TARGET_IMAGE_ID, targetImage)
 
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
             return intent
@@ -356,18 +360,43 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         if (viewModel.needsInit()) {
             fromUrl = handleIntentAction(intent)
             if (!fromUrl) {
-                val manga = intent.extras!!.getLong("manga", -1)
-                val chapter = intent.extras!!.getLong("chapter", -1)
-                if (manga == -1L || chapter == -1L) {
-                    finish()
-                    return
-                }
-                lifecycleScope.launchNonCancellable {
-                    val initResult = viewModel.init(manga, chapter)
-                    if (!initResult.getOrDefault(false)) {
-                        val exception = initResult.exceptionOrNull() ?: IllegalStateException("Unknown err")
-                        withUIContext {
-                            setInitialChapterError(exception)
+                when (mode) {
+                    ReaderMode.GALLERY -> {
+                        val galleryId = intent.extras!!.getLong(GALLERY_ID, -1)
+                        val targetId = intent.extras!!.getLong(TARGET_IMAGE_ID, -1)
+                        if (galleryId == -1L || targetId == -1L) {
+                            finish()
+                            return
+                        }
+
+                        lifecycleScope.launchNonCancellable {
+                            val initResult = viewModel.initGallery(galleryId, targetId)
+                            if (!initResult.getOrDefault(false)) {
+                                val exception = initResult.exceptionOrNull()
+                                    ?: IllegalStateException("Unknown err")
+                                withUIContext {
+                                    setInitialChapterError(exception)
+                                }
+                            }
+                        }
+                    }
+
+                    ReaderMode.MANGA -> {
+                        val manga = intent.extras!!.getLong("manga", -1)
+                        val chapter = intent.extras!!.getLong("chapter", -1)
+                        if (manga == -1L || chapter == -1L) {
+                            finish()
+                            return
+                        }
+                        lifecycleScope.launchNonCancellable {
+                            val initResult = viewModel.init(manga, chapter)
+                            if (!initResult.getOrDefault(false)) {
+                                val exception = initResult.exceptionOrNull()
+                                    ?: IllegalStateException("Unknown err")
+                                withUIContext {
+                                    setInitialChapterError(exception)
+                                }
+                            }
                         }
                     }
                 }
@@ -509,7 +538,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             if (config.shiftDoublePage && config.doublePages) {
                 pViewer.getShiftedPage()?.let {
                     outState.putInt(SHIFTED_PAGE_INDEX, it.index)
-                    outState.putLong(SHIFTED_CHAP_INDEX, it.chapter.chapter.id ?: 0L)
+                    outState.putLong(SHIFTED_CHAP_INDEX, it.chapter.chapterId)
                 }
             }
         }
@@ -629,9 +658,9 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                     ReaderBottomButton.CropBordersWebtoon.isIn(enabledButtons)
                 }
             webviewButton.isVisible =
-                ReaderBottomButton.WebView.isIn(enabledButtons)
+                ReaderBottomButton.WebView.isIn(enabledButtons) && mode != ReaderMode.GALLERY
             chaptersButton.isVisible =
-                ReaderBottomButton.ViewChapters.isIn(enabledButtons)
+                ReaderBottomButton.ViewChapters.isIn(enabledButtons) && mode != ReaderMode.GALLERY
             shiftPageButton.isVisible =
                 ((viewer as? PagerViewer)?.config?.doublePages ?: false) && canShowSplitAtBottom()
             binding.toolbar.menu.findItem(R.id.action_shift_double_page)?.isVisible =
@@ -1069,7 +1098,17 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
     }
 
     suspend fun loadChapter(chapter: Chapter) {
-        loadChapter(ReaderChapter(chapter))
+        if (mode == ReaderMode.GALLERY) {
+            return
+        }
+        loadChapter(ReaderChapter.MangaChapter(chapter))
+    }
+
+    suspend fun loadGallery(gallery: GalleryBo) {
+        if (mode == ReaderMode.MANGA) {
+            return
+        }
+        loadChapter(ReaderChapter.Gallery(gallery))
     }
 
     private suspend fun loadChapter(chapter: ReaderChapter) {
@@ -1385,7 +1424,8 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         binding.pleaseWait.clearAnimation()
         binding.pleaseWait.isVisible = false
         if (indexChapterToShift != null && indexPageToShift != null) {
-            viewerChapters.currChapter.pages?.find { it.index == indexPageToShift && it.chapter.chapter.id == indexChapterToShift }?.let {
+            viewerChapters.currChapter.pages?.find { it.index == indexPageToShift && it.chapter.chapterId == indexChapterToShift }
+                ?.let {
                 (viewer as? PagerViewer)?.updateShifting(it)
             }
             indexChapterToShift = null
@@ -1404,9 +1444,19 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         viewer?.setChapters(viewerChapters)
         intentPageNumber?.let { moveToPageIndex(it) }
         intentPageNumber = null
-        val chapter = viewerChapters.currChapter.chapter
-        binding.toolbar.subtitle =
-            chapter.preferredChapterName(this, viewModel.manga!!, preferences)
+
+        when (val curChapter = viewerChapters.currChapter) {
+            is ReaderChapter.MangaChapter -> {
+                val chapter = curChapter.chapter
+                binding.toolbar.subtitle =
+                    chapter.preferredChapterName(this, viewModel.manga!!, preferences)
+            }
+
+            is ReaderChapter.Gallery -> {
+                binding.toolbar.subtitle =
+                    "图片浏览模式"
+            }
+        }
 
         listOfNotNull(getTitleTextView(), getSubtitleTextView()).forEach { textView ->
             textView.ellipsize = TextUtils.TruncateAt.MARQUEE
@@ -1430,7 +1480,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             binding.readerNav.leftChapter.alpha = if (viewerChapters.prevChapter != null) 1f else 0.5f
         }
         if (didTransitionFromChapter) {
-            MainActivity.chapterIdToExitTo = viewerChapters.currChapter.chapter.id ?: 0L
+            MainActivity.chapterIdToExitTo = viewerChapters.currChapter.chapterId
         }
     }
 
@@ -1547,7 +1597,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             binding.readerNav.leftPageText.text = currentPage
             binding.readerNav.rightPageText.text = totalPages
         }
-        if (binding.chaptersSheet.chaptersBottomSheet.selectedChapterId != page.chapter.chapter.id) {
+        if (binding.chaptersSheet.chaptersBottomSheet.selectedChapterId != page.chapter.chapterId) {
             binding.chaptersSheet.chaptersBottomSheet.refreshList()
         }
         // Set seekbar progress
@@ -1617,12 +1667,17 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                     R.drawable.ic_save_24dp,
                     R.string.save,
                 ),
-                MaterialMenuSheet.MenuSheetItem(
-                    2,
-                    R.drawable.ic_photo_24dp,
-                    R.string.set_as_cover,
-                ),
-            )
+            ) + when (mode) {
+                ReaderMode.MANGA -> listOf(
+                    MaterialMenuSheet.MenuSheetItem(
+                        2,
+                        R.drawable.ic_photo_24dp,
+                        R.string.set_as_cover,
+                    ),
+                )
+
+                else -> emptyList()
+            }
         }
         MaterialMenuSheet(this, items) { _, item ->
             when (item) {
@@ -1704,22 +1759,35 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
      */
     private fun onShareImageResult(file: File, page: ReaderPage, secondPage: ReaderPage? = null) {
         val manga = viewModel.manga ?: return
-        val chapter = page.chapter.chapter
+        var text = ""
+        when (val curChapter = page.chapter) {
+            is ReaderChapter.MangaChapter -> {
+                val chapter = curChapter.chapter
 
-        val decimalFormat =
-            DecimalFormat("#.###", DecimalFormatSymbols().apply { decimalSeparator = '.' })
+                val decimalFormat =
+                    DecimalFormat("#.###", DecimalFormatSymbols().apply { decimalSeparator = '.' })
 
-        val pageNumber = if (secondPage != null) {
-            getString(R.string.pages_, if (resources.isLTR) "${page.number}-${page.number + 1}" else "${page.number + 1}-${page.number}")
-        } else {
-            getString(R.string.page_, page.number)
+                val pageNumber = if (secondPage != null) {
+                    getString(
+                        R.string.pages_,
+                        if (resources.isLTR) "${page.number}-${page.number + 1}" else "${page.number + 1}-${page.number}",
+                    )
+                } else {
+                    getString(R.string.page_, page.number)
+                }
+                text = "${manga.title}: ${
+                    if (chapter.isRecognizedNumber) {
+                        getString(R.string.chapter_, decimalFormat.format(chapter.chapter_number))
+                    } else {
+                        chapter.preferredChapterName(this, manga, preferences)
+                    }
+                }, $pageNumber"
+            }
+
+            is ReaderChapter.Gallery -> {
+                text = "这是gallery分享测试text"
+            }
         }
-        val text = "${manga.title}: ${if (chapter.isRecognizedNumber) {
-            getString(R.string.chapter_, decimalFormat.format(chapter.chapter_number))
-        } else {
-            chapter.preferredChapterName(this, manga, preferences)
-        }
-        }, $pageNumber"
 
         val stream = file.getUriCompat(this)
         val intent = Intent(Intent.ACTION_SEND).apply {

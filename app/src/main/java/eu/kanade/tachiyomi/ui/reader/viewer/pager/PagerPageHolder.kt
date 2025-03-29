@@ -20,6 +20,7 @@ import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.databinding.ReaderErrorBinding
 import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.settings.ReaderBackgroundColor
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderErrorView
@@ -624,7 +625,10 @@ class PagerPageHolder(
         val imageUrl = if (withOpenInWebView) {
             page.imageUrl
         } else {
-            viewer.activity.viewModel.getChapterUrl(page.chapter.chapter)
+            when (page.chapter) {
+                is ReaderChapter.MangaChapter -> viewer.activity.viewModel.getChapterUrl((page.chapter as ReaderChapter.MangaChapter).chapter)
+                is ReaderChapter.Gallery -> "nothing, not a manga chapter"
+            }
         }
         return errorLayout!!.configureView(imageUrl)
     }

@@ -7,6 +7,9 @@ import kotlin.math.floor
 private val pattern = Regex("""\d+""")
 
 fun hasMissingChapters(higherReaderChapter: ReaderChapter?, lowerReaderChapter: ReaderChapter?): Boolean {
+    if (higherReaderChapter !is ReaderChapter.MangaChapter || lowerReaderChapter !is ReaderChapter.MangaChapter) {
+        return false
+    }
     if (higherReaderChapter == null || lowerReaderChapter == null) return false
     return hasMissingChapters(higherReaderChapter.chapter, lowerReaderChapter.chapter)
 }
@@ -26,8 +29,14 @@ fun hasMissingChapters(higherChapterNumber: Float, lowerChapterNumber: Float): B
 }
 
 fun calculateChapterDifference(higherReaderChapter: ReaderChapter?, lowerReaderChapter: ReaderChapter?): Float {
+    if (higherReaderChapter !is ReaderChapter.MangaChapter && lowerReaderChapter !is ReaderChapter.MangaChapter) {
+        return 0f
+    }
     if (higherReaderChapter == null || lowerReaderChapter == null) return 0f
-    return calculateChapterDifference(higherReaderChapter.chapter, lowerReaderChapter.chapter)
+    return calculateChapterDifference(
+        (higherReaderChapter as ReaderChapter.MangaChapter).chapter,
+        (lowerReaderChapter as ReaderChapter.MangaChapter).chapter,
+    )
 }
 
 fun calculateChapterDifference(higherChapter: Chapter?, lowerChapter: Chapter?): Float {

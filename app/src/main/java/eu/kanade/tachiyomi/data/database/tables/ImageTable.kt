@@ -33,6 +33,8 @@ object ImageTable {
 
     const val MODIFIED_AT = "modified_at"
 
+    const val SOURCE = "source"
+
     const val WIDTH = "width"
 
     const val HEIGHT = "height"
@@ -47,6 +49,7 @@ object ImageTable {
             $HEIGHT INTEGER NOT NULL CHECK ($HEIGHT > 0),
             $FILE_SIZE INTEGER NOT NULL CHECK ($FILE_SIZE > 0),
             $CHECKSUM TEXT CHECK (length($CHECKSUM) = 64),
+            $SOURCE INTEGER NOT NULL,
             $EXIF_JSON TEXT,
             $CREATED_AT DATETIME NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')),
             $MODIFIED_AT DATETIME NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))

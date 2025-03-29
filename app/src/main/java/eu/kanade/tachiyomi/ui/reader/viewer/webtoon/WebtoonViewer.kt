@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.WebtoonLayoutManager
 import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.model.ChapterTransition
+import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 import eu.kanade.tachiyomi.ui.reader.viewer.BaseViewer
@@ -194,7 +195,9 @@ class WebtoonViewer(val activity: ReaderActivity, val hasMargins: Boolean = fals
             val nextItem = adapter.items.getOrNull(adapter.items.size - 1)
             val transitionChapter = (nextItem as? ChapterTransition.Next)?.to ?: (nextItem as?ReaderPage)?.chapter
             if (transitionChapter != null) {
-                Timber.d("Requesting to preload chapter ${transitionChapter.chapter.chapter_number}")
+                if (transitionChapter is ReaderChapter.MangaChapter) {
+                    Timber.d("Requesting to preload chapter ${transitionChapter.chapter.chapter_number}")
+                }
                 activity.requestPreloadChapter(transitionChapter)
             }
         }

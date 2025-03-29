@@ -39,19 +39,25 @@ import androidx.core.view.WindowInsetsCompat.Type.systemBars
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.data.gallery.GalleryManager
 import eu.kanade.tachiyomi.databinding.GalleryControllerBinding
 import eu.kanade.tachiyomi.ui.base.controller.BaseCoroutineController
 import eu.kanade.tachiyomi.ui.main.RootSearchInterface
+import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.rootWindowInsetsCompat
 import eu.kanade.tachiyomi.util.system.toInt
 import eu.kanade.tachiyomi.util.view.activityBinding
 import eu.kanade.tachiyomi.util.view.fullAppBarHeight
 import eu.kanade.tachiyomi.util.view.setAppBarBG
+import uy.kohesive.injekt.injectLazy
 
 class GalleryController(bundle: Bundle? = null) :
     BaseCoroutineController<GalleryControllerBinding, GalleryPresenter>(bundle),
     RootSearchInterface {
+
+    private val galleryManager: GalleryManager by injectLazy()
+
     override val presenter = GalleryPresenter()
 
     override fun createBinding(inflater: LayoutInflater): GalleryControllerBinding {
@@ -191,7 +197,6 @@ class GalleryController(bundle: Bundle? = null) :
         LaunchedEffect(key1 = isToolbarColored) {
             setAppBarBG(isToolbarColored.toInt().toFloat())
         }
-        val list by presenter.fetchAllImages().collectAsState(initial = emptyList())
         val listState by presenter.sourceImageSortDate.collectAsState()
         // 内容布局
         GalleryImageFlow(
@@ -203,7 +208,13 @@ class GalleryController(bundle: Bundle? = null) :
             maxWith = maxWith - 16.dpToPx,
             screenHeight = screenHeight,
             data = listState,
-        )
+        ) {
+            val galleryId = galleryManager.putTempGallery(presenter.sourceImage.value)
+            // 图片点击处理
+            ReaderActivity.newIntentToGallery(activity!!, galleryId, 1).apply {
+                startActivity(this)
+            }
+        }
 
         /*// 应用栏颜色动画
         AnimatedContent(targetState = isToolbarColored) { colored ->

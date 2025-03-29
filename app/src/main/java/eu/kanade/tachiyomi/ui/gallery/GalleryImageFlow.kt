@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.gallery
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -43,6 +44,7 @@ fun GalleryImageFlow(
     maxWith: Int,
     screenHeight: Int,
     data: Map<String, List<ImageBO>>,
+    onClickImage: ((ImageBO) -> Unit)? = null,
 ) {
     val items by remember(key1 = maxWith, key2 = data) {
         derivedStateOf {
@@ -77,7 +79,7 @@ fun GalleryImageFlow(
                     Text(
                         text = item.text,
                         style = LocalTextStyle.current.merge(
-                            MaterialTheme.typography.titleLarge,
+                            MaterialTheme.typography.headlineLarge,
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -107,7 +109,9 @@ fun GalleryImageFlow(
                                         width = (item.height.toDouble() / image.height * image.width)
                                             .toInt()
                                             .pxToDp().dp,
-                                    ),
+                                    ).clickable {
+                                        onClickImage?.invoke(image)
+                                    },
                                 // 灰色占位符
                                 placeholder = ColorPainter(Color.DarkGray),
                                 filterQuality = FilterQuality.Low,

@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS images
 );
      */
     override fun mapToContentValues(`object`: DBImage): ContentValues {
-        return ContentValues(10).apply {
+        return ContentValues(11).apply {
             put(ImageTable.ID, `object`.id)
             put(ImageTable.FILE_PATH, `object`.filePath)
             put(ImageTable.COLLECTION_PATH, `object`.collectionPath)
@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS images
             put(ImageTable.EXIF_JSON, `object`.exifJson)
             put(ImageTable.CREATED_AT, `object`.createdAt)
             put(ImageTable.MODIFIED_AT, `object`.modifiedAt)
+            put(ImageTable.SOURCE, `object`.source)
             put(ImageTable.WIDTH, `object`.width)
             put(ImageTable.HEIGHT, `object`.height)
         }
@@ -76,6 +77,7 @@ class ImageGetResolver : DefaultGetResolver<DBImage>() {
             exifJson = cursor.getString(cursor.getColumnIndex(ImageTable.EXIF_JSON))
             createdAt = cursor.getString(cursor.getColumnIndex(ImageTable.CREATED_AT))
             modifiedAt = cursor.getString(cursor.getColumnIndex(ImageTable.MODIFIED_AT))
+            source = cursor.getLong(cursor.getColumnIndex(ImageTable.SOURCE))
             width = cursor.getInt(cursor.getColumnIndex(ImageTable.WIDTH))
             height = cursor.getInt(cursor.getColumnIndex(ImageTable.HEIGHT))
         }

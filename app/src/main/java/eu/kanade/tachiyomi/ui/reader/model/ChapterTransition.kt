@@ -30,6 +30,6 @@ sealed class ChapterTransition {
     }
 
     override fun toString(): String {
-        return "${javaClass.simpleName}(from=${from.chapter.url}, to=${to?.chapter?.url})"
+        return "${javaClass.simpleName}(from=${from.url}, to=${to?.url})"
     }
 }

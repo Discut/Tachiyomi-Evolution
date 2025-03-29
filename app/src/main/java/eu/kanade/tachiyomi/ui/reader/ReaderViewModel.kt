@@ -17,10 +17,12 @@ import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.data.download.model.Download
+import eu.kanade.tachiyomi.data.gallery.GalleryManager
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.data.track.TrackService
+import eu.kanade.tachiyomi.model.GalleryBo
 import eu.kanade.tachiyomi.source.LocalSource
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.SourceManager
@@ -30,8 +32,11 @@ import eu.kanade.tachiyomi.ui.manga.chapter.ChapterItem
 import eu.kanade.tachiyomi.ui.reader.chapter.ReaderChapterItem
 import eu.kanade.tachiyomi.ui.reader.loader.ChapterLoader
 import eu.kanade.tachiyomi.ui.reader.loader.DownloadPageLoader
+import eu.kanade.tachiyomi.ui.reader.loader.GalleryLoader
 import eu.kanade.tachiyomi.ui.reader.loader.HttpPageLoader
+import eu.kanade.tachiyomi.ui.reader.loader.IChapterLoader
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
+import eu.kanade.tachiyomi.ui.reader.model.ReaderMode
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 import eu.kanade.tachiyomi.ui.reader.settings.OrientationType
@@ -86,7 +91,10 @@ class ReaderViewModel(
     private val coverCache: CoverCache = Injekt.get(),
     private val preferences: PreferencesHelper = Injekt.get(),
     private val chapterFilter: ChapterFilter = Injekt.get(),
+    private val galleryManager: GalleryManager = Injekt.get(),
 ) : ViewModel() {
+
+    var readMode: ReaderMode = ReaderMode.MANGA
 
     private val mutableState = MutableStateFlow(State())
     val state = mutableState.asStateFlow()
@@ -117,7 +125,7 @@ class ReaderViewModel(
     /**
      * The chapter loader for the loaded manga. It'll be null until [manga] is set.
      */
-    private var loader: ChapterLoader? = null
+    private var loader: IChapterLoader? = null
 
     /**
      * The time the chapter was started reading
@@ -144,7 +152,7 @@ class ReaderViewModel(
         val chaptersForReader =
             chapterFilter.filterChaptersForReader(dbChapters, manga, selectedChapter)
         val chapterSort = ChapterSort(manga, chapterFilter, preferences)
-        chaptersForReader.sortedWith(chapterSort.sortComparator(true)).map(::ReaderChapter)
+        chaptersForReader.sortedWith(chapterSort.sortComparator(true)).map(ReaderChapter::MangaChapter)
     }
 
     private var chapterItems = emptyList<ReaderChapterItem>()
@@ -165,11 +173,23 @@ class ReaderViewModel(
             .distinctUntilChanged()
             .filterNotNull()
             .onEach { currentChapter ->
-                chapterId = currentChapter.chapter.id!!
-                if (secondRun || !currentChapter.chapter.read) {
-                    currentChapter.requestedPage = currentChapter.chapter.last_page_read
+                when (currentChapter) {
+                    is eu.kanade.tachiyomi.ui.reader.model.ReaderChapter.Gallery -> {
+                        chapterId = currentChapter.chapterId!!
+                        /*if (secondRun || !currentChapter.chapter.read) {
+                            currentChapter.requestedPage = currentChapter.chapter.last_page_read
+                        }*/
+                        currentChapter.requestedPage = 1
+                        secondRun = true
+                    }
+                    is eu.kanade.tachiyomi.ui.reader.model.ReaderChapter.MangaChapter -> {
+                        chapterId = currentChapter.chapterId!!
+                        if (secondRun || !currentChapter.chapter.read) {
+                            currentChapter.requestedPage = currentChapter.chapter.last_page_read
+                        }
+                        secondRun = true
+                    }
                 }
-                secondRun = true
             }
             .launchIn(viewModelScope)
     }
@@ -216,6 +236,7 @@ class ReaderViewModel(
         if (!needsInit()) return Result.success(true)
         return withIOContext {
             try {
+                readMode = ReaderMode.MANGA
                 val manga = db.getManga(mangaId).executeAsBlocking()
                 if (manga != null) {
                     mutableState.update { it.copy(manga = manga) }
@@ -250,22 +271,56 @@ class ReaderViewModel(
         }
     }
 
+    suspend fun initGallery(tempGalleryId: Long, targetId: Long): Result<Boolean> {
+        if (!needsInit()) return Result.success(true)
+
+        return withIOContext {
+            try {
+                readMode = ReaderMode.GALLERY
+                val gallery = galleryManager.buildGallery(tempGalleryId)
+
+                if (gallery != GalleryBo.EMPTY) {
+                    mutableState.update { it.copy(manga = gallery) }
+
+                    val context = Injekt.get<Application>()
+                    loader = GalleryLoader(context, gallery)
+
+                    loadGallery(loader!!, gallery)
+                    Result.success(true)
+                } else {
+                    // Unlikely but okay
+                    Result.success(false)
+                }
+            } catch (e: Throwable) {
+                if (e is CancellationException) {
+                    throw e
+                }
+                Result.failure(e)
+            }
+        }
+    }
+
     suspend fun getChapters(): List<ReaderChapterItem> {
         val manga = manga ?: return emptyList()
-        chapterItems = withContext(Dispatchers.IO) {
-            val chapterSort = ChapterSort(manga, chapterFilter, preferences)
-            val dbChapters = db.getChapters(manga).executeAsBlocking()
-            chapterSort.getChaptersSorted(
-                dbChapters,
-                filterForReader = true,
-                currentChapter = getCurrentChapter()?.chapter,
-            ).map {
-                ReaderChapterItem(
-                    it,
-                    manga,
-                    it.id == (getCurrentChapter()?.chapter?.id ?: chapterId),
-                )
+        if (readMode == ReaderMode.MANGA) {
+            val curChapter = getCurrentChapter() as? ReaderChapter.MangaChapter
+            chapterItems = withContext(Dispatchers.IO) {
+                val chapterSort = ChapterSort(manga, chapterFilter, preferences)
+                val dbChapters = db.getChapters(manga).executeAsBlocking()
+                chapterSort.getChaptersSorted(
+                    dbChapters,
+                    filterForReader = true,
+                    currentChapter = curChapter?.chapter,
+                ).map {
+                    ReaderChapterItem(
+                        it,
+                        manga,
+                        it.id == (curChapter?.chapter?.id ?: chapterId),
+                    )
+                }
             }
+        } else {
+            chapterItems = emptyList()
         }
 
         return chapterItems
@@ -356,7 +411,7 @@ class ReaderViewModel(
     private suspend fun loadNewChapter(chapter: ReaderChapter) {
         val loader = loader ?: return
 
-        Timber.d("Loading ${chapter.chapter.url}")
+        Timber.d("Loading ${chapter.url}")
 
         withIOContext {
             try {
@@ -375,7 +430,7 @@ class ReaderViewModel(
      * Callers must handle errors.
      */
     private suspend fun loadChapter(
-        loader: ChapterLoader,
+        loader: IChapterLoader,
         chapter: ReaderChapter,
     ): ViewerChapters {
         loader.loadChapter(chapter)
@@ -400,13 +455,37 @@ class ReaderViewModel(
         return newChapters
     }
 
+    private suspend fun loadGallery(
+        loader: IChapterLoader,
+        gallery: GalleryBo,
+    ): ViewerChapters {
+        val galleryReaderChapter = ReaderChapter.Gallery(gallery)
+        loader.loadChapter(galleryReaderChapter)
+        val newChapters = ViewerChapters(galleryReaderChapter, null, null)
+
+        withUIContext {
+            mutableState.update {
+                // Add new references first to avoid unnecessary recycling
+                newChapters.ref()
+                it.viewerChapters?.unref()
+
+                chapterToDownload = deleteChapterFromDownloadQueue(newChapters.currChapter)
+                it.copy(viewerChapters = newChapters)
+            }
+        }
+        return newChapters
+    }
+
     /**
      * Called when the user is going to load the prev/next chapter through the menu button.
      */
     suspend fun loadChapter(chapter: ReaderChapter): Int? {
         val loader = loader ?: return -1
+        if (chapter !is ReaderChapter.MangaChapter) {
+            return -1
+        }
 
-        Timber.d("Loading adjacent ${chapter.chapter.url}")
+        Timber.d("Loading adjacent ${chapter.url}")
         var lastPage: Int? = if (chapter.chapter.pages_left <= 1) 0 else chapter.chapter.last_page_read
         mutableState.update { it.copy(isLoadingAdjacentChapter = true) }
         try {
@@ -435,6 +514,9 @@ class ReaderViewModel(
      * that the user doesn't have to wait too long to continue reading.
      */
     private suspend fun preload(chapter: ReaderChapter) {
+        if (chapter !is ReaderChapter.MangaChapter) {
+            return
+        }
         if (chapter.pageLoader is HttpPageLoader) {
             val manga = manga ?: return
             val isDownloaded = downloadManager.isChapterDownloaded(chapter.chapter, manga)
@@ -477,6 +559,9 @@ class ReaderViewModel(
         val currentChapters = state.value.viewerChapters ?: return
 
         val selectedChapter = page.chapter
+        if (selectedChapter !is ReaderChapter.MangaChapter) {
+            return
+        }
 
         // Save last page read and mark as read if needed
         selectedChapter.chapter.last_page_read = page.index
@@ -496,7 +581,7 @@ class ReaderViewModel(
         }
 
         if (selectedChapter != currentChapters.currChapter) {
-            Timber.d("Setting ${selectedChapter.chapter.url} as active")
+            Timber.d("Setting ${selectedChapter.url} as active")
             saveReadingProgress(currentChapters.currChapter)
             setReadStartTime()
             scope.launch { loadNewChapter(selectedChapter) }
@@ -510,8 +595,13 @@ class ReaderViewModel(
 
     private fun downloadNextChapters() {
         val manga = manga ?: return
+
+        var nextChapter1 = state.value.viewerChapters?.nextChapter
+        if (nextChapter1 !is ReaderChapter.MangaChapter) {
+            return
+        }
         if (getCurrentChapter()?.pageLoader !is DownloadPageLoader) return
-        val nextChapter = state.value.viewerChapters?.nextChapter?.chapter ?: return
+        val nextChapter = nextChapter1?.chapter ?: return
         val chaptersNumberToDownload = preferences.autoDownloadWhileReading().get()
         if (chaptersNumberToDownload == 0 || !manga.favorite) return
         val isNextChapterDownloaded = downloadManager.isChapterDownloaded(nextChapter, manga)
@@ -548,6 +638,9 @@ class ReaderViewModel(
      * if setting is enabled and [currentChapter] is queued for download
      */
     private fun deleteChapterFromDownloadQueue(currentChapter: ReaderChapter): Download? {
+        if (currentChapter !is ReaderChapter.MangaChapter) {
+            return null
+        }
         return downloadManager.getChapterDownloadOrNull(currentChapter.chapter)?.apply {
             downloadManager.deletePendingDownloads(this)
         }
@@ -601,6 +694,9 @@ class ReaderViewModel(
      * If incognito mode isn't on or has at least 1 tracker
      */
     private fun saveChapterProgress(readerChapter: ReaderChapter) {
+        if (readerChapter !is ReaderChapter.MangaChapter) {
+            return
+        }
         readerChapter.requestedPage = readerChapter.chapter.last_page_read
         db.getChapter(readerChapter.chapter.id!!).executeAsBlocking()?.let { dbChapter ->
             readerChapter.chapter.bookmark = dbChapter.bookmark
@@ -614,6 +710,9 @@ class ReaderViewModel(
      * Saves this [readerChapter] last read history.
      */
     private fun saveChapterHistory(readerChapter: ReaderChapter) {
+        if (readerChapter !is ReaderChapter.MangaChapter) {
+            return
+        }
         if (!preferences.incognitoMode().get()) {
             val readAt = Date().time
             val sessionReadDuration = chapterReadStartTime?.let { readAt - it } ?: 0
@@ -648,7 +747,10 @@ class ReaderViewModel(
     fun getChapterUrl(mainChapter: Chapter? = null): String? {
         val manga = manga ?: return null
         val source = getSource() ?: return null
-        val chapter = mainChapter ?: getCurrentChapter()?.chapter ?: return null
+        val chapter = mainChapter ?: when (val curChapter = getCurrentChapter()) {
+            is ReaderChapter.MangaChapter -> curChapter.chapter
+            else -> return@getChapterUrl "nothing, not a manga chapter"
+        }
         val chapterUrl = try { source.getChapterUrl(chapter) } catch (_: Exception) { null }
         return chapterUrl.takeIf { !it.isNullOrBlank() } ?: source.getChapterUrl(manga, chapter)
     }
@@ -690,7 +792,12 @@ class ReaderViewModel(
             if (currChapters != null) {
                 // Save current page
                 val currChapter = currChapters.currChapter
-                currChapter.requestedPage = currChapter.chapter.last_page_read
+                currChapter.requestedPage = when {
+                    currChapter is ReaderChapter.MangaChapter -> {
+                        currChapter.chapter.last_page_read
+                    }
+                    else -> 1
+                }
 
                 mutableState.update {
                     it.copy(
@@ -750,12 +857,22 @@ class ReaderViewModel(
 
         directory.mkdirs()
 
-        val chapter = page.chapter.chapter
+        var filename = ""
 
-        // Build destination file.
-        val filename = DiskUtil.buildValidFilename(
-            "${manga.title} - ${chapter.preferredChapterName(context, manga, preferences)}".take(225),
-        ) + " - ${page.number}.${type.extension}"
+        when (val curChapter = page.chapter) {
+            is ReaderChapter.MangaChapter -> {
+                val chapter = curChapter.chapter
+
+                // Build destination file.
+                filename = DiskUtil.buildValidFilename(
+                    "${manga.title} - ${chapter.preferredChapterName(context, manga, preferences)}".take(225),
+                ) + " - ${page.number}.${type.extension}"
+            }
+
+            is ReaderChapter.Gallery -> {
+                filename = "gallery.jpg"
+            }
+        }
 
         val destFile = File(directory, filename)
         stream().use { input ->
@@ -782,14 +899,22 @@ class ReaderViewModel(
 
         val stream = ImageUtil.mergeBitmaps(imageBitmap, imageBitmap2, isLTR, bg)
         directory.mkdirs()
+        var filename = ""
+        when (val curChapter = page1.chapter) {
+            is ReaderChapter.MangaChapter -> {
+                val chapter = curChapter.chapter
+                val context = Injekt.get<Application>()
 
-        val chapter = page1.chapter.chapter
-        val context = Injekt.get<Application>()
+                // Build destination file.
+                filename = DiskUtil.buildValidFilename(
+                    "${manga.title} - ${chapter.preferredChapterName(context, manga, preferences)}".take(225),
+                ) + " - ${page1.number}-${page2.number}.jpg"
+            }
 
-        // Build destination file.
-        val filename = DiskUtil.buildValidFilename(
-            "${manga.title} - ${chapter.preferredChapterName(context, manga, preferences)}".take(225),
-        ) + " - ${page1.number}-${page2.number}.jpg"
+            is ReaderChapter.Gallery -> {
+                filename = "gallery.jpg"
+            }
+        }
 
         val destFile = File(directory, filename)
         stream.use { input ->
@@ -957,6 +1082,9 @@ class ReaderViewModel(
      * will run in a background thread and errors are ignored.
      */
     private fun updateTrackChapterAfterReading(readerChapter: ReaderChapter) {
+        if (readerChapter !is ReaderChapter.MangaChapter) {
+            return
+        }
         if (!preferences.autoUpdateTrack()) return
 
         launchIO {
@@ -973,6 +1101,9 @@ class ReaderViewModel(
      * manager handles persisting it across process deaths.
      */
     private fun enqueueDeleteReadChapters(chapter: ReaderChapter) {
+        if (chapter !is ReaderChapter.MangaChapter) {
+            return
+        }
         if (!chapter.chapter.read) return
         val manga = manga ?: return
 

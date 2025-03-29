@@ -1,12 +1,12 @@
 package eu.kanade.tachiyomi.ui.reader.model
 
 import eu.kanade.tachiyomi.data.database.models.Chapter
+import eu.kanade.tachiyomi.model.GalleryBo
 import eu.kanade.tachiyomi.ui.reader.loader.PageLoader
 import kotlinx.coroutines.flow.MutableStateFlow
 import timber.log.Timber
 
-data class ReaderChapter(val chapter: Chapter) {
-
+sealed class ReaderChapter {
     val stateFlow = MutableStateFlow<State>(State.Wait)
     var state: State
         get() = stateFlow.value
@@ -21,22 +21,16 @@ data class ReaderChapter(val chapter: Chapter) {
 
     var requestedPage: Int = 0
 
-    private var references = 0
+    protected var references = 0
 
-    fun ref() {
-        references++
+    open var chapterId = 0L
+
+    open var url = ""
+
+    open fun ref() {
     }
 
-    fun unref() {
-        references--
-        if (references == 0) {
-            if (pageLoader != null) {
-                Timber.d("Recycling chapter ${chapter.name}")
-            }
-            pageLoader?.recycle()
-            pageLoader = null
-            state = State.Wait
-        }
+    open fun unref() {
     }
 
     sealed class State {
@@ -44,5 +38,49 @@ data class ReaderChapter(val chapter: Chapter) {
         object Loading : State()
         class Error(val error: Throwable) : State()
         class Loaded(val pages: List<ReaderPage>) : State()
+    }
+
+    data class MangaChapter(val chapter: Chapter) : ReaderChapter() {
+        override var chapterId: Long = chapter.id ?: -1
+        override var url = chapter.url
+
+        override fun ref() {
+            references++
+        }
+
+        override fun unref() {
+            references--
+            if (references == 0) {
+                if (pageLoader != null) {
+                    Timber.d("Recycling chapter ${chapter.name}")
+                }
+                pageLoader?.recycle()
+                pageLoader = null
+                state = State.Wait
+            }
+        }
+    }
+
+    data class Gallery(val galleryBo: GalleryBo) : ReaderChapter() {
+
+        override var chapterId: Long = galleryBo.id ?: -1
+
+        override var url = "nothing, it's a gallery"
+
+        override fun ref() {
+            references++
+        }
+
+        override fun unref() {
+            references--
+            if (references == 0) {
+                if (pageLoader != null) {
+                    Timber.d("Recycling chapter $galleryBo")
+                }
+                pageLoader?.recycle()
+                pageLoader = null
+                state = State.Wait
+            }
+        }
     }
 }

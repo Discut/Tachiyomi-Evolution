@@ -22,14 +22,14 @@ class ChapterLoader(
     private val downloadProvider: DownloadProvider,
     private val manga: Manga,
     private val source: Source,
-) {
+) : IChapterLoader {
 
     /**
      * Assigns the chapter's page loader and loads the its pages. Returns immediately if the chapter
      * is already loaded.
      */
-    suspend fun loadChapter(chapter: ReaderChapter) {
-        if (chapterIsReady(chapter)) {
+    override suspend fun loadChapter(chapter: ReaderChapter) {
+        if (chapterIsReady(chapter) || chapter !is ReaderChapter.MangaChapter) {
             return
         }
 
@@ -71,11 +71,18 @@ class ChapterLoader(
     /**
      * Returns the page loader to use for this [chapter].
      */
-    private fun getPageLoader(chapter: ReaderChapter): PageLoader {
+    private fun getPageLoader(chapter: ReaderChapter.MangaChapter): PageLoader {
         val dbChapter = chapter.chapter
         val isDownloaded = downloadManager.isChapterDownloaded(dbChapter, manga, skipCache = true)
         return when {
-            isDownloaded -> DownloadPageLoader(chapter, manga, source, downloadManager, downloadProvider)
+            isDownloaded -> DownloadPageLoader(
+                chapter,
+                manga,
+                source,
+                downloadManager,
+                downloadProvider,
+            )
+
             source is HttpSource -> HttpPageLoader(chapter, source)
             source is LocalSource -> source.getFormat(chapter.chapter).let { format ->
                 when (format) {
@@ -86,9 +93,11 @@ class ChapterLoader(
                     } catch (e: UnsupportedRarV5Exception) {
                         error(context.getString(R.string.loader_rar5_error))
                     }
+
                     is LocalSource.Format.Epub -> EpubPageLoader(format.file)
                 }
             }
+
             else -> error(context.getString(R.string.source_not_installed))
         }
     }

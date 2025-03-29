@@ -27,7 +27,7 @@ import kotlin.math.min
  * Loader used to load chapters from an online source.
  */
 class HttpPageLoader(
-    private val chapter: ReaderChapter,
+    private val chapter: ReaderChapter.MangaChapter,
     private val source: HttpSource,
     private val chapterCache: ChapterCache = Injekt.get(),
     private val preferences: PreferencesHelper = Injekt.get(),

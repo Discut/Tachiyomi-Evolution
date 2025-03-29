@@ -88,6 +88,6 @@ object ViewUtil {
     // 优化后的宽度计算（防止除零错误）
     private fun calculateImageWidth(images: List<ImageBO>, height: Int, spacing: Int): Int =
         images.sumOf { img ->
-            if (img.height == 0) 0 else (height.toDouble() / img.height * img.width).toInt()
+            if (img.height == 0) 0 else (height * img.aspectRatio).toInt()
         } + spacing * (images.size - 1)
 }

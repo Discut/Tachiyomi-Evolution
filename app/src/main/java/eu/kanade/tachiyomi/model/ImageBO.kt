@@ -2,7 +2,6 @@ package eu.kanade.tachiyomi.model
 
 import androidx.compose.runtime.Immutable
 import eu.kanade.tachiyomi.data.database.models.DBImage
-import eu.kanade.tachiyomi.source.gallery.model.SImage
 import java.io.InputStream
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -11,26 +10,33 @@ import java.util.Locale
 
 @Immutable
 class ImageBO(
-    val sImage: SImage? = null,
-    val dbImage: DBImage? = null,
+    val dbImage: DBImage,
 ) {
 
+    val aspectRatio: Float by lazy {
+        if (height == 0) 1f else width.toFloat() / height
+    }
+
+    val id = dbImage.id
+
     val name: String
-        get() = sImage?.name ?: dbImage?.filePath ?: ""
+        get() = dbImage.filePath
 
     val fileSize: Long
-        get() = sImage?.fileSize ?: dbImage?.fileSize ?: 0
+        get() = dbImage.fileSize
 
     val createdTime: String
-        get() = sImage?.createdAt ?: dbImage?.createdAt ?: ""
+        get() = dbImage.createdAt
 
     val width: Int
-        get() = sImage?.width ?: dbImage?.width ?: 1
+        get() = dbImage.width
 
     val height: Int
-        get() = sImage?.height ?: dbImage?.height ?: 1
+        get() = dbImage.height
 
-    val url = sImage?.url ?: dbImage?.filePath ?: ""
+    val url = dbImage.filePath
+
+    val source = dbImage.source
 
     /**
      * get stream of bytes

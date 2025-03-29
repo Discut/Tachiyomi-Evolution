@@ -1,4 +1,5 @@
 import java.io.ByteArrayOutputStream
+import kotlin.system.measureNanoTime
 
 plugins {
     id(Plugins.androidApplication)
@@ -126,6 +127,7 @@ android {
 }
 
 dependencies {
+    implementation("androidx.compose.runtime:runtime-tracing:1.7.8")
     // Compose
     implementation("androidx.activity:activity-compose:1.7.2")
     implementation("androidx.compose.foundation:foundation:1.5.1")
