@@ -25,6 +25,7 @@ import eu.kanade.tachiyomi.data.image.coil.CoilSetup
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.data.preference.asImmediateFlow
+import eu.kanade.tachiyomi.error.GlobalCrashHandler
 import eu.kanade.tachiyomi.ui.library.LibraryPresenter
 import eu.kanade.tachiyomi.ui.recents.RecentsPresenter
 import eu.kanade.tachiyomi.ui.security.SecureActivityDelegate
@@ -52,6 +53,17 @@ open class App : Application(), DefaultLifecycleObserver {
     override fun onCreate() {
         super<Application>.onCreate()
         if (BuildConfig.DEBUG) Timber.plant(Timber.DebugTree())
+
+        Thread.setDefaultUncaughtExceptionHandler(GlobalCrashHandler(this))
+
+        // 在Application初始化时配置
+        /*Coil.setImageLoader(
+            ImageLoader.Builder(this)
+                .components {
+                    add(HardwareBitmapDecoder.Factory()) // 启用硬件加速
+                }
+                .build(),
+        )*/
 
         // TLS 1.3 support for Android 10 and below
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {

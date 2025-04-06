@@ -34,7 +34,6 @@
             android:id="@+id/chapters_button"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            app:layout_constraintWidth_max="wrap"
             android:background="?selectableItemBackgroundBorderless"
             android:contentDescription="@string/next_title"
             android:padding="@dimen/material_layout_keylines_screen_edge_margin"
@@ -44,6 +43,7 @@
             app:layout_constraintHorizontal_chainStyle="spread"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintWidth_max="wrap"
             app:srcCompat="@drawable/ic_format_list_numbered_24dp"
             app:tint="?actionBarTintColor" />
 
@@ -173,6 +173,7 @@
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <androidx.recyclerview.widget.RecyclerView
+        android:visibility="gone"
         android:id="@+id/chapter_recycler"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -180,4 +181,8 @@
         android:background="@android:color/transparent"
         android:clipToPadding="false"
         tools:listitem="@layout/reader_chapter_item" />
+
+    <include
+        android:id="@+id/tags_container"
+        layout="@layout/reader_image_tags"/>
 </eu.kanade.tachiyomi.ui.reader.chapter.ReaderChapterSheet>

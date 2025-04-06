@@ -6,18 +6,12 @@ import com.pushtorefresh.storio.sqlite.impl.DefaultStorIOSQLite
 import eu.kanade.tachiyomi.data.database.mappers.CategoryTypeMapping
 import eu.kanade.tachiyomi.data.database.mappers.ChapterTypeMapping
 import eu.kanade.tachiyomi.data.database.mappers.HistoryTypeMapping
-import eu.kanade.tachiyomi.data.database.mappers.ImageMapping
 import eu.kanade.tachiyomi.data.database.mappers.MangaCategoryTypeMapping
 import eu.kanade.tachiyomi.data.database.mappers.MangaTypeMapping
 import eu.kanade.tachiyomi.data.database.mappers.SearchMetadataTypeMapping
-import eu.kanade.tachiyomi.data.database.mappers.TagMapping
-import eu.kanade.tachiyomi.data.database.mappers.TagTypeMapping
 import eu.kanade.tachiyomi.data.database.mappers.TrackTypeMapping
 import eu.kanade.tachiyomi.data.database.models.Category
 import eu.kanade.tachiyomi.data.database.models.Chapter
-import eu.kanade.tachiyomi.data.database.models.DBImage
-import eu.kanade.tachiyomi.data.database.models.DBTag
-import eu.kanade.tachiyomi.data.database.models.DBTagType
 import eu.kanade.tachiyomi.data.database.models.History
 import eu.kanade.tachiyomi.data.database.models.Manga
 import eu.kanade.tachiyomi.data.database.models.MangaCategory
@@ -26,12 +20,9 @@ import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.database.queries.CategoryQueries
 import eu.kanade.tachiyomi.data.database.queries.ChapterQueries
 import eu.kanade.tachiyomi.data.database.queries.HistoryQueries
-import eu.kanade.tachiyomi.data.database.queries.ImageQueries
 import eu.kanade.tachiyomi.data.database.queries.MangaCategoryQueries
 import eu.kanade.tachiyomi.data.database.queries.MangaQueries
 import eu.kanade.tachiyomi.data.database.queries.SearchMetadataQueries
-import eu.kanade.tachiyomi.data.database.queries.TagQueries
-import eu.kanade.tachiyomi.data.database.queries.TagTypeQueries
 import eu.kanade.tachiyomi.data.database.queries.TrackQueries
 import io.requery.android.database.sqlite.RequerySQLiteOpenHelperFactory
 
@@ -45,10 +36,7 @@ open class DatabaseHelper(context: Context) :
     CategoryQueries,
     MangaCategoryQueries,
     HistoryQueries,
-    SearchMetadataQueries,
-    TagQueries,
-    ImageQueries,
-    TagTypeQueries {
+    SearchMetadataQueries {
 
     private val configuration = SupportSQLiteOpenHelper.Configuration.builder(context)
         .name(DbOpenCallback.DATABASE_NAME)
@@ -64,9 +52,6 @@ open class DatabaseHelper(context: Context) :
         .addTypeMapping(MangaCategory::class.java, MangaCategoryTypeMapping())
         .addTypeMapping(SearchMetadata::class.java, SearchMetadataTypeMapping())
         .addTypeMapping(History::class.java, HistoryTypeMapping())
-        .addTypeMapping(DBTag::class.java, TagMapping())
-        .addTypeMapping(DBImage::class.java, ImageMapping())
-        .addTypeMapping(DBTagType::class.java, TagTypeMapping())
         .build()
 
     inline fun inTransaction(block: () -> Unit) = db.inTransaction(block)

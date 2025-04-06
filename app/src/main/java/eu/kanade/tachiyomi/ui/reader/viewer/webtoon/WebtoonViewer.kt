@@ -332,4 +332,11 @@ class WebtoonViewer(val activity: ReaderActivity, val hasMargins: Boolean = fals
             min(position + 3, adapter.itemCount - 1),
         )
     }
+
+    override fun currentPage(): ReaderPage? {
+        if (currentPage is ReaderPage) {
+            return currentPage as ReaderPage
+        }
+        return null
+    }
 }

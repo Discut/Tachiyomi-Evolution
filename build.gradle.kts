@@ -2,9 +2,11 @@ plugins {
     id(Plugins.kotlinter.name) version Plugins.kotlinter.version
     id(Plugins.gradleVersions.name) version Plugins.gradleVersions.version
     id(Plugins.jetbrainsKotlin) version AndroidVersions.kotlin apply false
+    id("com.google.devtools.ksp") version "1.9.10-1.0.13" apply false
 }
 allprojects {
     repositories {
+        mavenLocal()
         google()
         mavenCentral()
         maven { setUrl("https://jitpack.io") }

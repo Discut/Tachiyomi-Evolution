@@ -508,4 +508,11 @@ abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer {
             activity.hideMenu()
         }
     }
+
+    override fun currentPage(): ReaderPage? {
+        if (currentPage is ReaderPage) {
+            return currentPage as ReaderPage
+        }
+        return null
+    }
 }

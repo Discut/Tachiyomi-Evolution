@@ -179,7 +179,6 @@ class ReaderViewModel(
                         /*if (secondRun || !currentChapter.chapter.read) {
                             currentChapter.requestedPage = currentChapter.chapter.last_page_read
                         }*/
-                        currentChapter.requestedPage = 1
                         secondRun = true
                     }
                     is eu.kanade.tachiyomi.ui.reader.model.ReaderChapter.MangaChapter -> {
@@ -279,13 +278,17 @@ class ReaderViewModel(
                 readMode = ReaderMode.GALLERY
                 val gallery = galleryManager.buildGallery(tempGalleryId)
 
+                val index = gallery.images.indexOfFirst { it.id == targetId }.let {
+                    if (it != -1) it else 0
+                }
+
                 if (gallery != GalleryBo.EMPTY) {
                     mutableState.update { it.copy(manga = gallery) }
 
                     val context = Injekt.get<Application>()
                     loader = GalleryLoader(context, gallery)
 
-                    loadGallery(loader!!, gallery)
+                    loadGallery(loader!!, gallery, index)
                     Result.success(true)
                 } else {
                     // Unlikely but okay
@@ -458,8 +461,11 @@ class ReaderViewModel(
     private suspend fun loadGallery(
         loader: IChapterLoader,
         gallery: GalleryBo,
+        index: Int = 0,
     ): ViewerChapters {
-        val galleryReaderChapter = ReaderChapter.Gallery(gallery)
+        val galleryReaderChapter = ReaderChapter.Gallery(gallery).apply {
+            requestedPage = index
+        }
         loader.loadChapter(galleryReaderChapter)
         val newChapters = ViewerChapters(galleryReaderChapter, null, null)
 

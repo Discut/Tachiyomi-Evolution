@@ -75,6 +75,7 @@ import eu.kanade.tachiyomi.BuildConfig
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Chapter
 import eu.kanade.tachiyomi.data.database.models.Manga
+import eu.kanade.tachiyomi.data.gallery.GalleryExtensions.tryGetImage
 import eu.kanade.tachiyomi.data.preference.asImmediateFlowIn
 import eu.kanade.tachiyomi.data.preference.toggle
 import eu.kanade.tachiyomi.data.track.TrackService
@@ -99,6 +100,7 @@ import eu.kanade.tachiyomi.ui.reader.settings.PageLayout
 import eu.kanade.tachiyomi.ui.reader.settings.ReaderBottomButton
 import eu.kanade.tachiyomi.ui.reader.settings.ReadingModeType
 import eu.kanade.tachiyomi.ui.reader.settings.TabbedReaderSettingsSheet
+import eu.kanade.tachiyomi.ui.reader.sheet.TagSettingsSheet
 import eu.kanade.tachiyomi.ui.reader.viewer.BaseViewer
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.L2RPagerViewer
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerViewer
@@ -130,6 +132,7 @@ import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.util.system.rootWindowInsetsCompat
 import eu.kanade.tachiyomi.util.system.spToPx
 import eu.kanade.tachiyomi.util.system.toast
+import eu.kanade.tachiyomi.util.system.withIOContext
 import eu.kanade.tachiyomi.util.system.withUIContext
 import eu.kanade.tachiyomi.util.view.collapse
 import eu.kanade.tachiyomi.util.view.compatToolTipText
@@ -816,6 +819,10 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         }
 
         binding.toolbar.setOnClickListener {
+            if (mode == ReaderMode.GALLERY) {
+                Timber.i("Gallery 不跳转到详情页")
+                return@setOnClickListener
+            }
             viewModel.manga?.id?.let { id ->
                 val intent = SearchActivity.openMangaIntent(this, id)
                 startActivity(intent)
@@ -1426,8 +1433,8 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         if (indexChapterToShift != null && indexPageToShift != null) {
             viewerChapters.currChapter.pages?.find { it.index == indexPageToShift && it.chapter.chapterId == indexChapterToShift }
                 ?.let {
-                (viewer as? PagerViewer)?.updateShifting(it)
-            }
+                    (viewer as? PagerViewer)?.updateShifting(it)
+                }
             indexChapterToShift = null
             indexPageToShift = null
         }
@@ -1615,6 +1622,11 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         val items = if (extraPage != null) {
             listOf(
                 MaterialMenuSheet.MenuSheetItem(
+                    100,
+                    R.drawable.ic_bookmark_24dp,
+                    R.string.mark_second_page,
+                ),
+                MaterialMenuSheet.MenuSheetItem(
                     3,
                     R.drawable.ic_outline_share_24dp,
                     R.string.share_second_page,
@@ -1628,6 +1640,11 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                     5,
                     R.drawable.ic_outline_photo_24dp,
                     R.string.set_second_page_as_cover,
+                ),
+                MaterialMenuSheet.MenuSheetItem(
+                    101,
+                    R.drawable.ic_bookmark_24dp,
+                    R.string.mark_first_page,
                 ),
                 MaterialMenuSheet.MenuSheetItem(
                     0,
@@ -1657,6 +1674,11 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             )
         } else {
             listOf(
+                MaterialMenuSheet.MenuSheetItem(
+                    102,
+                    R.drawable.ic_bookmark_24dp,
+                    R.string.mark_page,
+                ),
                 MaterialMenuSheet.MenuSheetItem(
                     0,
                     R.drawable.ic_share_24dp,
@@ -1698,6 +1720,8 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                         }
                     }
                 }
+                102, 100 -> showMarkDialog(page)
+                101 -> extraPage?.let { showMarkDialog(it) }
             }
             true
         }.show()
@@ -1741,6 +1765,21 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         viewModel.shareImage(page)
     }
 
+    private fun showMarkDialog(page: ReaderPage) {
+        scope.launchUI {
+            val currentImage = withIOContext {
+                page.tryGetImage()
+            } ?: return@launchUI
+            val tagSettingsSheet = TagSettingsSheet(this@ReaderActivity, currentImage) {
+                startActivity(
+                    MainActivity.newIntentJumpGallerySearch(this@ReaderActivity, it.tagId),
+                )
+                finish()
+            }
+            tagSettingsSheet.show()
+        }
+    }
+
     private fun showSetCoverPrompt(page: ReaderPage) {
         if (page.status != Page.State.READY) return
 
@@ -1776,11 +1815,11 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                     getString(R.string.page_, page.number)
                 }
                 text = "${manga.title}: ${
-                    if (chapter.isRecognizedNumber) {
-                        getString(R.string.chapter_, decimalFormat.format(chapter.chapter_number))
-                    } else {
-                        chapter.preferredChapterName(this, manga, preferences)
-                    }
+                if (chapter.isRecognizedNumber) {
+                    getString(R.string.chapter_, decimalFormat.format(chapter.chapter_number))
+                } else {
+                    chapter.preferredChapterName(this, manga, preferences)
+                }
                 }, $pageNumber"
             }
 
@@ -1867,7 +1906,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                                 val newBitmap = Bitmap.createBitmap(
                                     intrinsicWidth,
                                     intrinsicHeight,
-                                    bitmap.config,
+                                    bitmap.config!!,
                                 )
                                 val canvas = Canvas(newBitmap)
                                 val bgColor = ColorUtils.setAlphaComponent(service.getLogoColor(), 255)

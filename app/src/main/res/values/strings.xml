@@ -1210,6 +1210,12 @@
     <!-- Gallery -->
     <string name="local_gallery_source">Local Gallery source</string>
     <string name="gallery">Gallery</string>
+    <string name="mark_second_page">Mark second page</string>
+    <string name="mark_first_page">Mark first page</string>
+    <string name="mark_page">Mark page</string>
+
+
+
 
 
 </resources>

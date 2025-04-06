@@ -3,7 +3,9 @@ package eu.kanade.tachiyomi.ui.gallery
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalDensity
 import eu.kanade.tachiyomi.model.ImageBO
+import timber.log.Timber
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 object ViewUtil {
     // Float 扩展函数
@@ -26,6 +28,7 @@ object ViewUtil {
     @Composable
     fun Int.pxToDp(): Int = this.toFloat().pxToDp().toInt()
 
+    @Deprecated("不再使用", level = DeprecationLevel.WARNING, replaceWith = ReplaceWith("calculateImageRowV2"))
     tailrec fun calculateImageRow(
         maxHeight: Int,
         minHeight: Int = 200,
@@ -35,6 +38,7 @@ object ViewUtil {
         images: List<ImageBO>,
         acc: List<GalleryItem.Images> = emptyList(),
     ): List<GalleryItem.Images> {
+        Timber.e("calculateImageRow: maxHeight=$maxHeight, minHeight=$minHeight, screenWidth=$screenWidth, spacing=$spacing, maxSize=$maxSize, images=${images.size}, acc=${acc.size}")
         if (images.isEmpty() || maxSize <= 0) return acc
 
         for (count in maxSize downTo 1) {
@@ -83,6 +87,53 @@ object ViewUtil {
             images,
             acc,
         )
+    }
+
+    tailrec fun calculateImageRowV2(
+        minHeight: Int = 200,
+        maxHeight: Int,
+        screenWidth: Int,
+        spacing: Int = 0,
+        maxSize: Int = 8,
+        curSize: Int = maxSize,
+        images: List<ImageBO>,
+        acc: List<GalleryItem.Images> = emptyList(),
+    ): List<GalleryItem.Images> {
+        Timber.e("calculateImageRow: minHeight=$minHeight, screenWidth=$screenWidth, spacing=$spacing, maxSize=$maxSize, images=${images.size}, acc=${acc.size}")
+        if (images.isEmpty() || curSize <= 0) return acc
+        val currentImages = images.take(curSize)
+
+        val ratioSum = currentImages.sumOf { it.aspectRatio.toDouble() }
+        val calculateHeight = screenWidth / ratioSum
+        if (calculateHeight > minHeight) {
+            return calculateImageRowV2(
+                minHeight,
+                maxHeight,
+                screenWidth,
+                spacing,
+                maxSize,
+                maxSize,
+                images.drop(curSize),
+                acc + GalleryItem.Images(currentImages, calculateHeight.roundToInt()).apply {
+                    if (this@apply.images.size <= 3 && height > maxHeight / 1.5) {
+                        height = (maxHeight / 1.5).roundToInt()
+                    } else if (height > maxHeight) {
+                        height = maxHeight
+                    }
+                },
+            )
+        } else {
+            return calculateImageRowV2(
+                minHeight,
+                maxHeight,
+                screenWidth,
+                spacing,
+                maxSize,
+                curSize - 1,
+                images,
+                acc,
+            )
+        }
     }
 
     // 优化后的宽度计算（防止除零错误）

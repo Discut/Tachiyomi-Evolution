@@ -1,8 +1,12 @@
 package eu.kanade.tachiyomi.model
 
 import androidx.compose.runtime.Immutable
-import eu.kanade.tachiyomi.data.database.models.DBImage
+import eu.kanade.tachiyomi.data.database_orm.GalleryDatabase
+import eu.kanade.tachiyomi.data.database_orm.models.DBImage
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.io.InputStream
+import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
@@ -25,8 +29,12 @@ class ImageBO(
     val fileSize: Long
         get() = dbImage.fileSize
 
-    val createdTime: String
-        get() = dbImage.createdAt
+    val createdTime: String by lazy {
+        val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        dbImage.createdAt.let {
+            formatter.format(it)
+        }
+    }
 
     val width: Int
         get() = dbImage.width
@@ -38,10 +46,20 @@ class ImageBO(
 
     val source = dbImage.source
 
+    // 预缓存，现主要用于排序
+    val cachedTimeMillis: Long = dbImage.modifiedAt.time
+
     /**
      * get stream of bytes
      */
     var stream: (() -> InputStream)? = null
+
+    suspend fun getTags(): List<TagBo> {
+        Injekt.get<GalleryDatabase>().getImageDao().getImageWithTags(id)?.apply {
+            return tags?.map { it.toTagBo() } ?: emptyList()
+        }
+        return emptyList()
+    }
 }
 
 fun ImageBO.getDateTimeTag(): String {
@@ -57,9 +75,9 @@ fun ImageBO.getDateTimeTag(): String {
 private fun getDateLabel(date: LocalDate): String {
     val today = LocalDate.now()
     return when {
-        date == today -> "Today"
-        date == today.minusDays(1) -> "Yesterday"
-        date.isAfter(today.minusDays(7)) -> date.dayOfWeek.getDisplayName(
+        date == today -> TODAY_TAG
+        date == today.minusDays(1) -> YESTERDAY_TAG
+        date.isAfter(today.minusDays(7)) -> WEEK_TAG + date.dayOfWeek.getDisplayName(
             TextStyle.FULL,
             Locale.getDefault(),
         )
@@ -67,3 +85,13 @@ private fun getDateLabel(date: LocalDate): String {
         else -> "${date.year}年${date.monthValue.toString().padStart(2, '0')}月"
     }
 }
+
+const val TODAY_TAG = "9999"
+const val YESTERDAY_TAG = "8888"
+const val WEEK_TAG = "7777"
+fun String.getRealDate(): String =
+    when (this) {
+        TODAY_TAG -> "今天"
+        YESTERDAY_TAG -> "昨天"
+        else -> this.replace(WEEK_TAG, "")
+    }

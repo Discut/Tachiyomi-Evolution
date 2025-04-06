@@ -5,6 +5,7 @@ import androidx.core.content.ContextCompat
 import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
+import eu.kanade.tachiyomi.data.database_orm.GalleryDatabase
 import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.data.gallery.GalleryManager
 import eu.kanade.tachiyomi.data.library.CustomMangaManager
@@ -73,6 +74,10 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { TrustExtension(get()) }
 
         addSingletonFactory { GalleryManager(app) }
+
+        addSingletonFactory {
+            GalleryDatabase.getDatabase(app)
+        }
 
         // Asynchronously init expensive components for a faster cold start
 

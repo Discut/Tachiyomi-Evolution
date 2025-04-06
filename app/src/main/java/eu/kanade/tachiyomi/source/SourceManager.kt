@@ -109,7 +109,7 @@ class SourceManager(
         return gallerySourceMapFlow.value[sourceKey]
     }
 
-    fun getAllGallerySources() = gallerySourceMapFlow.value.values
+    fun getAllGallerySources() = gallerySourceMapFlow.value.values.toList()
 
     fun getOrStub(sourceKey: Long): Source {
         return sourcesMapFlow.value[sourceKey] ?: stubSourcesMap.getOrPut(sourceKey) {

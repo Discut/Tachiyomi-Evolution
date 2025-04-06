@@ -122,7 +122,7 @@ internal object ExtensionLoader {
                 it.setReadOnly()
                 val path = it.absolutePath
                 pkgManager.getPackageArchiveInfo(path, PACKAGE_FLAGS)
-                    ?.apply { applicationInfo.fixBasePaths(path) }
+                    ?.apply { applicationInfo!!.fixBasePaths(path) }
             }
             ?.filter { isPackageAnExtension(it) }
             ?.map { ExtensionInfo(packageInfo = it, isShared = false) }
@@ -226,7 +226,7 @@ internal object ExtensionLoader {
             context.packageManager.getPackageArchiveInfo(privateExtensionFile.absolutePath, PACKAGE_FLAGS)
                 ?.takeIf { isPackageAnExtension(it) }
                 ?.let {
-                    it.applicationInfo.fixBasePaths(privateExtensionFile.absolutePath)
+                    it.applicationInfo!!.fixBasePaths(privateExtensionFile.absolutePath)
                     ExtensionInfo(
                         packageInfo = it,
                         isShared = false,
@@ -276,7 +276,7 @@ internal object ExtensionLoader {
         val appInfo = pkgInfo.applicationInfo
         val pkgName = pkgInfo.packageName
 
-        val extName = pkgManager.getApplicationLabel(appInfo).toString().substringAfter("Tachiyomi: ")
+        val extName = pkgManager.getApplicationLabel(appInfo!!).toString().substringAfter("Tachiyomi: ")
         val versionName = pkgInfo.versionName
         val versionCode = PackageInfoCompat.getLongVersionCode(pkgInfo)
 
@@ -311,15 +311,15 @@ internal object ExtensionLoader {
             return LoadResult.Untrusted(extension)
         }
 
-        val isNsfw = appInfo.metaData.getInt(METADATA_NSFW) == 1
+        val isNsfw = appInfo!!.metaData.getInt(METADATA_NSFW) == 1
         if (!loadNsfwSource && isNsfw) {
             Timber.w("NSFW extension $pkgName not allowed")
             return LoadResult.Error
         }
 
-        val classLoader = PathClassLoader(appInfo.sourceDir, null, context.classLoader)
+        val classLoader = PathClassLoader(appInfo!!.sourceDir, null, context.classLoader)
 
-        val sources = appInfo.metaData.getString(METADATA_SOURCE_CLASS)!!
+        val sources = appInfo!!.metaData.getString(METADATA_SOURCE_CLASS)!!
             .split(";")
             .map {
                 val sourceClass = it.trim()
@@ -360,8 +360,8 @@ internal object ExtensionLoader {
             lang = lang,
             isNsfw = isNsfw,
             sources = sources,
-            pkgFactory = appInfo.metaData.getString(METADATA_SOURCE_FACTORY),
-            icon = appInfo.loadIcon(pkgManager),
+            pkgFactory = appInfo!!.metaData.getString(METADATA_SOURCE_FACTORY),
+            icon = appInfo!!.loadIcon(pkgManager),
             isShared = extensionInfo.isShared,
         )
         return LoadResult.Success(extension)
@@ -409,10 +409,10 @@ internal object ExtensionLoader {
     private fun getSignatures(pkgInfo: PackageInfo): List<String>? {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val signingInfo = pkgInfo.signingInfo
-            if (signingInfo.hasMultipleSigners()) {
-                signingInfo.apkContentsSigners
+            if (signingInfo!!.hasMultipleSigners()) {
+                signingInfo!!.apkContentsSigners
             } else {
-                signingInfo.signingCertificateHistory
+                signingInfo!!.signingCertificateHistory
             }
         } else {
             @Suppress("DEPRECATION")

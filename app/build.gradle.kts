@@ -1,5 +1,4 @@
 import java.io.ByteArrayOutputStream
-import kotlin.system.measureNanoTime
 
 plugins {
     id(Plugins.androidApplication)
@@ -10,6 +9,7 @@ plugins {
     id("com.google.android.gms.oss-licenses-plugin")
     id(Plugins.googleServices) apply false
     id("com.google.firebase.crashlytics")
+    id("com.google.devtools.ksp")
 }
 
 if (gradle.startParameter.taskRequests.toString().contains("Standard")) {
@@ -127,20 +127,22 @@ android {
 }
 
 dependencies {
-    implementation("androidx.compose.runtime:runtime-tracing:1.7.8")
     // Compose
-    implementation("androidx.activity:activity-compose:1.7.2")
-    implementation("androidx.compose.foundation:foundation:1.5.1")
-    implementation("androidx.compose.animation:animation:1.5.1")
-    implementation("androidx.compose.ui:ui:1.5.1")
-    implementation("androidx.compose.material:material:1.5.1")
-    implementation("androidx.compose.material3:material3:1.1.2")
+    val compose = "1.7.8"
+    implementation("androidx.activity:activity-compose:1.10.1")
+    implementation("androidx.compose.foundation:foundation:$compose")
+    implementation("androidx.compose.animation:animation:$compose")
+    implementation("androidx.compose.ui:ui:$compose")
+    implementation("androidx.compose.material:material:$compose")
+    implementation("androidx.compose.material3:material3:1.3.1")
+    implementation("androidx.compose.material3:material3-android:1.3.1")
     implementation("com.google.android.material:compose-theme-adapter-3:1.1.1")
-    implementation("androidx.compose.material:material-icons-extended:1.5.1")
-    implementation("androidx.compose.ui:ui-tooling-preview:1.5.1")
-    debugImplementation("androidx.compose.ui:ui-tooling:1.5.1")
+    implementation("androidx.compose.material:material-icons-extended:$compose")
+    implementation("androidx.compose.ui:ui-tooling-preview:$compose")
+    debugImplementation("androidx.compose.ui:ui-tooling:$compose")
     implementation("com.google.accompanist:accompanist-webview:0.30.1")
     implementation("androidx.glance:glance-appwidget:1.0.0")
+
 
     // Modified dependencies
     implementation("com.github.jays2kings:subsampling-scale-image-view:756849e") {
@@ -306,6 +308,15 @@ dependencies {
 
     // get image mate
     implementation("com.drewnoakes:metadata-extractor:2.16.0")
+
+    // Room https://developer.android.google.cn/jetpack/androidx/releases/room?hl=zh-cn#declaring_dependencies
+    val room_version = "2.6.1"
+    implementation("androidx.room:room-runtime:$room_version")
+    implementation("androidx.room:room-ktx:$room_version")
+    ksp("androidx.room:room-compiler:$room_version")
+
+    // scrollbar
+    implementation("my.nanihadesuka.lazycolumnscrollbar:lazycolumnscrollbar:2.2.0-discut-1")
 
 }
 

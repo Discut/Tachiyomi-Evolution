@@ -10,6 +10,7 @@ import eu.kanade.tachiyomi.source.gallery.model.Page
 import eu.kanade.tachiyomi.source.gallery.model.SImage
 import eu.kanade.tachiyomi.source.gallery.model.STag
 import eu.kanade.tachiyomi.util.storage.DiskUtil
+import eu.kanade.tachiyomi.util.toLongBySHA256
 import uy.kohesive.injekt.injectLazy
 import java.io.File
 import java.text.SimpleDateFormat
@@ -33,7 +34,7 @@ class LocalGallerySource(private val context: Context) : GallerySource, Unmetere
         private fun getBaseDirectories(context: Context): List<File> {
             val basePath = listOf(
                 context.getString(R.string.app_name) + File.separator + "gallery",
-                "Pictures" + File.separator + "JHentaib",
+                "Pictures" + File.separator + "JHentai",
             )
             return DiskUtil.getExternalStorages(context).map { c ->
                 basePath.map { File(c.absolutePath, it) }
@@ -58,7 +59,7 @@ class LocalGallerySource(private val context: Context) : GallerySource, Unmetere
             val height = options.outHeight
             SImage(
                 index = index,
-                id = index.toLong(),
+                id = file.absolutePath.toLongBySHA256(),
                 createdAt = modifiedTime,
                 modifiedAt = modifiedTime,
                 fileSize = file.length(),

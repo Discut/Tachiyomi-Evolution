@@ -75,6 +75,7 @@ import eu.kanade.tachiyomi.Migrations
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.download.DownloadJob
 import eu.kanade.tachiyomi.data.download.DownloadManager
+import eu.kanade.tachiyomi.data.gallery.GalleryManager
 import eu.kanade.tachiyomi.data.library.LibraryUpdateJob
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
@@ -121,6 +122,7 @@ import eu.kanade.tachiyomi.util.system.materialAlertDialog
 import eu.kanade.tachiyomi.util.system.prepareSideNavContext
 import eu.kanade.tachiyomi.util.system.rootWindowInsetsCompat
 import eu.kanade.tachiyomi.util.system.toast
+import eu.kanade.tachiyomi.util.system.withIOContext
 import eu.kanade.tachiyomi.util.view.BackHandlerControllerInterface
 import eu.kanade.tachiyomi.util.view.backgroundColor
 import eu.kanade.tachiyomi.util.view.blurBehindWindow
@@ -165,6 +167,7 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
     private val downloadManager: DownloadManager by injectLazy()
     private val mangaShortcutManager: MangaShortcutManager by injectLazy()
     private val extensionManager: ExtensionManager by injectLazy()
+    private val gallerymanager by injectLazy<GalleryManager>()
     private val hideBottomNav
         get() = router.backstackSize > 1 && router.backstack[1].controller !is DialogController
 
@@ -1076,6 +1079,25 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
                     }
                 }
             }
+            SHORTCUT_SEARCH_GALLERY -> {
+                val tagId = intent.extras?.getLong(INTENT_TAG_ID) ?: return false
+
+                lifecycleScope.launchUI {
+                    val tagBo = withIOContext {
+                        gallerymanager.getTagById(tagId)
+                    } ?: return@launchUI
+                    setRoot(
+                        GalleryController(targetTag = tagBo),
+                        -1,
+                    )
+                    /*router.pushController(
+                        GallerySearchController().apply {
+                            tag = tagBo
+                        }.withFadeInTransaction(),
+                    )*/
+                    // router.pushController(GallerySearchController().withFadeInTransaction())
+                }
+            }
             else -> return false
         }
         return true
@@ -1574,13 +1596,23 @@ open class MainActivity : BaseActivity<MainActivityBinding>() {
         const val SHORTCUT_SOURCE = "eu.kanade.tachiyomi.SHOW_SOURCE"
         const val SHORTCUT_READER_SETTINGS = "eu.kanade.tachiyomi.READER_SETTINGS"
         const val SHORTCUT_EXTENSIONS = "eu.kanade.tachiyomi.EXTENSIONS"
+        const val SHORTCUT_SEARCH_GALLERY = "eu.kanade.tachiyomi.SEARCH_GALLERY"
 
         const val INTENT_SEARCH = "eu.kanade.tachiyomi.SEARCH"
         const val INTENT_SEARCH_QUERY = "query"
         const val INTENT_SEARCH_FILTER = "filter"
 
+        const val INTENT_TAG_ID = "tagId"
+
         var chapterIdToExitTo = 0L
         var backVelocity = 0f
+
+        fun newIntentJumpGallerySearch(context: Context, tagId: Long): Intent =
+            Intent(context, MainActivity::class.java).apply {
+                action = SHORTCUT_SEARCH_GALLERY
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                putExtra(INTENT_TAG_ID, tagId)
+            }
     }
 }
 

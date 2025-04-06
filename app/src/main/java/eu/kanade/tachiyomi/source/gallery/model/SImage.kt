@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.source.gallery.model
 
-import eu.kanade.tachiyomi.data.database.models.DBImage
+import eu.kanade.tachiyomi.data.database_orm.models.DBImage
+import eu.kanade.tachiyomi.util.toDate
 
 open class SImage(
     val index: Int,
@@ -18,15 +19,16 @@ open class SImage(
         get() = index + 1
 }
 
-fun SImage.toDBImage() = DBImage().also {
-    it.id = id
-    it.filePath = url
-    it.collectionPath = "/"
-    it.fileSize = fileSize
-    it.exifJson = ""
-    it.createdAt = createdAt
-    it.modifiedAt = modifiedAt
-    it.width = width
-    it.height = height
-    it.source = source
-}
+fun SImage.toDBImage() =
+    DBImage(
+        id = this.id,
+        filePath = url,
+        collectionPath = "/",
+        fileSize = fileSize,
+        exifJson = "",
+        createdAt = createdAt.toDate(),
+        modifiedAt = modifiedAt.toDate(),
+        width = width,
+        height = height,
+        source = source,
+    )

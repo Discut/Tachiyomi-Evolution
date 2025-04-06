@@ -17,7 +17,7 @@ object ImageTable {
 
     const val TABLE = "images"
 
-    const val ID = "id"
+    const val ID = "image_id"
 
     const val FILE_PATH = "file_path"
 
