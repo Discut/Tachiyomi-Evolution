@@ -1062,4 +1062,20 @@
     <string name="error_repo_exists">此仓库网址已存在！</string>
     <string name="auto_play">自动翻页</string>
     <string name="use_auto_play_progress">显示翻页进度条</string>
+
+    <!-- Gallery -->
+    <string name="local_gallery_source">本地图片源</string>
+    <string name="gallery">图集</string>
+    <string name="mark_second_page">标记第二张图片</string>
+    <string name="mark_first_page">标记第一张图片</string>
+    <string name="mark_page">标记图片</string>
+    <string name="gallery_local_directory">图集本地目录</string>
+    <string name="include_directory">包含目录</string>
+    <string name="include_directory_summary">扫描这些目录中的图片</string>
+    <string name="exclude_directory">排除目录</string>
+    <string name="exclude_directory_summary">忽略这些目录中的图片</string>
+    <string name="rescan_gallery">重新扫描</string>
+    <string name="rescan_gallery_summary">当前已发现 %s 张图片</string>
+    <string name="gallery_can_be_used_to_restore">可用于恢复当前的图片记录</string>
+    <string name="gallery_restore_from_backup_file">从备份文件中恢复当前的图片数据</string>
 </resources>

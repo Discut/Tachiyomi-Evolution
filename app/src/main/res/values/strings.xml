@@ -1213,6 +1213,20 @@
     <string name="mark_second_page">Mark second page</string>
     <string name="mark_first_page">Mark first page</string>
     <string name="mark_page">Mark page</string>
+    <string name="gallery_local_directory">Gallery Local Directory</string>
+    <string name="include_directory">Include directory</string>
+    <string name="include_directory_summary">Scan this directory for images</string>
+    <string name="exclude_directory">Exclude directory</string>
+    <string name="exclude_directory_summary">Do not scan this directory for images</string>
+    <string name="rescan_gallery">Rescan gallery</string>
+    <string name="rescan_gallery_summary">Currently, %s pictures have been retrieved</string>
+    <string name="gallery_can_be_used_to_restore">Can be used to restore current gallery</string>
+    <string name="gallery_restore_from_backup_file">Restore gallery from backup file</string>
+    <string name="backup_created_and_info">Backup created, it contains %s entries</string>
+
+
+
+
 
 
 
