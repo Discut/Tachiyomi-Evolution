@@ -237,4 +237,8 @@ object PreferenceKeys {
     const val hideChapterTitles = "hide_chapter_titles"
 
     const val chaptersDescAsDefault = "chapters_desc_as_default"
+
+    const val galleryIncludeDirs = "gallery_include_dirs"
+
+    const val galleryExcludeDirs = "gallery_exclude_dirs"
 }

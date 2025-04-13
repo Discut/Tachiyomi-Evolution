@@ -486,4 +486,8 @@ class PreferencesHelper(val context: Context) {
     fun useStaggeredGrid() = flowPrefs.getBoolean("use_staggered_grid", false)
 
     fun useAutoPlayProgress() = flowPrefs.getBoolean("use_auto_play_progress", false)
+
+    fun getGalleryScanIncludes() = flowPrefs.getStringSet(Keys.galleryIncludeDirs, emptySet())
+
+    fun getGalleryScanExcludes() = flowPrefs.getStringSet(Keys.galleryExcludeDirs, emptySet())
 }
