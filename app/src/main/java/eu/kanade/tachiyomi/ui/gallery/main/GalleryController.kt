@@ -81,6 +81,7 @@ class GalleryController(
 
     override fun onViewCreated(view: View) {
         super.onViewCreated(view)
+        activity?.findViewById<View>(R.id.app_bar)?.visibility = View.GONE
         view.findViewById<ComposeView>(R.id.gallery_container)?.setContent {
             val isDarkTheme = when (AppCompatDelegate.getDefaultNightMode()) {
                 AppCompatDelegate.MODE_NIGHT_YES -> true
