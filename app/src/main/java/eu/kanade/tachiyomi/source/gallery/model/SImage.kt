@@ -32,3 +32,17 @@ fun SImage.toDBImage() =
         height = height,
         source = source,
     )
+
+fun DBImage.toSImage() =
+    SImage(
+        index = 0,
+        id = id,
+        createdAt = createdAt.toString(),
+        modifiedAt = modifiedAt.toString(),
+        fileSize = fileSize,
+        name = System.currentTimeMillis().toString(),
+        url = filePath,
+        width = width,
+        height = height,
+        source = source,
+    )

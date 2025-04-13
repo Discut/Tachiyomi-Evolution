@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.source.gallery
 
+import eu.kanade.tachiyomi.source.gallery.model.ImageStream
 import eu.kanade.tachiyomi.source.gallery.model.Page
 import eu.kanade.tachiyomi.source.gallery.model.SImage
 import eu.kanade.tachiyomi.source.gallery.model.STag
@@ -17,6 +18,10 @@ interface GallerySource {
 
     val lang: String
         get() = ""
+
+    suspend fun getImageStream(image: SImage): ImageStream?
+
+    suspend fun getThumbnailImageStream(image: SImage): ImageStream?
 
     suspend fun getAllImages(): List<SImage>
 
