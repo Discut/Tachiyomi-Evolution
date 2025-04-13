@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.gallery
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalDensity
 import eu.kanade.tachiyomi.model.ImageBO
+import eu.kanade.tachiyomi.ui.gallery.main.state.GalleryItem
 import timber.log.Timber
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -28,6 +29,17 @@ object ViewUtil {
     @Composable
     fun Int.pxToDp(): Int = this.toFloat().pxToDp().toInt()
 
+    /**
+     *                         /*ViewUtil.calculateImageRow(
+     *                             minHeight = screenHeight / 10,
+     *                             maxHeight = screenHeight / 3,
+     *                             screenWidth = maxWith,
+     *                             spacing = spacing.value.dpToPx.toInt(),
+     *                             maxSize = 10,
+     *                             images = it.value,
+     *                             acc = emptyList(),
+     *                         ),*/
+     */
     @Deprecated("不再使用", level = DeprecationLevel.WARNING, replaceWith = ReplaceWith("calculateImageRowV2"))
     tailrec fun calculateImageRow(
         maxHeight: Int,
@@ -99,7 +111,7 @@ object ViewUtil {
         images: List<ImageBO>,
         acc: List<GalleryItem.Images> = emptyList(),
     ): List<GalleryItem.Images> {
-        Timber.e("calculateImageRow: minHeight=$minHeight, screenWidth=$screenWidth, spacing=$spacing, maxSize=$maxSize, images=${images.size}, acc=${acc.size}")
+        // Timber.e("calculateImageRow: minHeight=$minHeight, screenWidth=$screenWidth, spacing=$spacing, maxSize=$maxSize, images=${images.size}, acc=${acc.size}")
         if (images.isEmpty() || curSize <= 0) return acc
         val currentImages = images.take(curSize)
 

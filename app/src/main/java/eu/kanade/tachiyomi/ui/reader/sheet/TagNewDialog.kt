@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.data.gallery.GalleryManager
 import eu.kanade.tachiyomi.databinding.TagNewDialogBinding
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.source.gallery.local.LocalGallerySource
+import eu.kanade.tachiyomi.util.generateTimestampBasedID
 import uy.kohesive.injekt.injectLazy
 
 class TagNewDialog {
@@ -75,12 +76,6 @@ class TagNewDialog {
             }
             .setNegativeButton("Cancel", null)
             .show()
-    }
-
-    fun generateTimestampBasedID(): Long {
-        val timestamp = System.currentTimeMillis() // 13位时间戳
-        val random = (1000..9999).random() // 4位随机数
-        return "$timestamp$random".toLong() // 组合成17位数字
     }
 
     class InnerArrayAdapter(

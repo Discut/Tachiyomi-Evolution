@@ -49,6 +49,12 @@ class SettingsMainController : SettingsController(), FloatingSearchInterface {
             onClick { navigateTo(SettingsLibraryController()) }
         }
         preference {
+            iconRes = R.drawable.ic_outline_photo_24dp
+            iconTint = tintColor
+            titleRes = R.string.gallery
+            onClick { navigateTo(SettingsGalleryController()) }
+        }
+        preference {
             iconRes = R.drawable.ic_read_outline_24dp
             iconTint = tintColor
             titleRes = R.string.reader

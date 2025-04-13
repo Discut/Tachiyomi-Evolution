@@ -566,6 +566,7 @@ class ReaderViewModel(
 
         val selectedChapter = page.chapter
         if (selectedChapter !is ReaderChapter.MangaChapter) {
+            selectedChapter.requestedPage = page.index
             return
         }
 
@@ -792,26 +793,52 @@ class ReaderViewModel(
         val manga = manga ?: return
 
         runBlocking(Dispatchers.IO) {
-            manga.readingModeType = readingModeType
-            db.updateViewerFlags(manga).executeAsBlocking()
-            val currChapters = state.value.viewerChapters
-            if (currChapters != null) {
-                // Save current page
-                val currChapter = currChapters.currChapter
-                currChapter.requestedPage = when {
-                    currChapter is ReaderChapter.MangaChapter -> {
-                        currChapter.chapter.last_page_read
-                    }
-                    else -> 1
-                }
+            when (manga) {
+                is GalleryBo -> {
+                    manga.readingModeType = readingModeType
+                    val currChapters = state.value.viewerChapters
+                    if (currChapters != null) {
+                        // Save current page
+                        /*val currChapter = currChapters.currChapter
+                        currChapter.requestedPage = when {
+                            currChapter is ReaderChapter.Gallery -> {
+                                currChapter.chapter.last_page_read
+                            }
+                            else -> 1
+                        }*/
 
-                mutableState.update {
-                    it.copy(
-                        manga = db.getManga(manga.id!!).executeAsBlocking(),
-                        viewerChapters = currChapters,
-                    )
+                        mutableState.update {
+                            it.copy(
+                                manga = manga,
+                                viewerChapters = currChapters,
+                            )
+                        }
+                        eventChannel.send(Event.ReloadMangaAndChapters)
+                    }
                 }
-                eventChannel.send(Event.ReloadMangaAndChapters)
+                else -> {
+                    manga.readingModeType = readingModeType
+                    db.updateViewerFlags(manga).executeAsBlocking()
+                    val currChapters = state.value.viewerChapters
+                    if (currChapters != null) {
+                        // Save current page
+                        val currChapter = currChapters.currChapter
+                        currChapter.requestedPage = when {
+                            currChapter is ReaderChapter.MangaChapter -> {
+                                currChapter.chapter.last_page_read
+                            }
+                            else -> 1
+                        }
+
+                        mutableState.update {
+                            it.copy(
+                                manga = db.getManga(manga.id!!).executeAsBlocking(),
+                                viewerChapters = currChapters,
+                            )
+                        }
+                        eventChannel.send(Event.ReloadMangaAndChapters)
+                    }
+                }
             }
         }
     }

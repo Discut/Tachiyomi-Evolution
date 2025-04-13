@@ -1,8 +1,9 @@
 package eu.kanade.tachiyomi.ui.gallery.component
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -10,18 +11,30 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.FilterChip
+import androidx.compose.material.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.DeleteForever
+import androidx.compose.material.icons.outlined.SmartDisplay
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
@@ -30,8 +43,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
@@ -40,8 +58,9 @@ import coil.size.Precision
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.model.ImageBO
 import eu.kanade.tachiyomi.model.getRealDate
-import eu.kanade.tachiyomi.ui.gallery.GalleryItem
 import eu.kanade.tachiyomi.ui.gallery.ViewUtil.pxToDp
+import eu.kanade.tachiyomi.ui.gallery.main.state.GalleryItem
+import eu.kanade.tachiyomi.ui.reader.sheet.TagVo
 
 @Composable
 fun GalleryImageFlow(
@@ -50,6 +69,10 @@ fun GalleryImageFlow(
     spacing: Dp = 4.dp,
     state: LazyListState = rememberLazyListState(),
     items: List<GalleryItem>,
+    isSelectedTags: Boolean = false,
+    onClickTag: ((TagVo) -> Unit)? = null,
+    onClearAllSelected: (() -> Unit)? = null,
+    onRandomPlay: (() -> Unit)? = null,
     shouldLoad: Boolean = true,
     onClickImage: ((ImageBO) -> Unit)? = null,
 ) {
@@ -74,24 +97,104 @@ fun GalleryImageFlow(
                 is GalleryItem.AppBar -> {
                     val actionBarSize = dimensionResource(R.dimen.mainActionBarSize)
 
-                    Box(
+                    Column(
                         modifier = Modifier
                             .padding(top = actionBarSize),
                     ) {
                         Text(
                             text = item.text,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.headlineLarge.merge(
-                                color =
-                                LocalTextStyle.current.color,
+                                TextStyle(
+                                    fontFamily = FontFamily.Default,
+                                    color = LocalTextStyle.current.color,
+                                    lineHeight = 32.sp, // 根据设计系统调整
+                                    platformStyle = PlatformTextStyle(includeFontPadding = false),
+                                ),
                             ),
-                            modifier = Modifier.padding(
-                                top = (
-                                    30 + WindowInsets.statusBars.getTop(
-                                        LocalDensity.current,
-                                    )
-                                    ).dp,
-                            ),
+                            modifier = Modifier
+                                .padding(
+                                    top = (
+                                        24 + WindowInsets.statusBars.getTop(
+                                            LocalDensity.current,
+                                        )
+                                        ).dp,
+                                )
+                                .heightIn(min = 48.dp),
                         )
+
+                        if (item.tags.isEmpty()) {
+                            return@Column
+                        }
+
+                        TagVerticalSelector(
+                            modifier = Modifier
+                                .fillMaxWidth(),
+                            actions = {
+                                IconButton(
+                                    onClick = {
+                                        onRandomPlay?.invoke()
+                                    },
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.SmartDisplay,
+                                        contentDescription = null,
+                                        tint = LocalTextStyle.current.color,
+                                    )
+                                }
+
+                                AnimatedVisibility(visible = isSelectedTags) {
+                                    IconButton(
+                                        onClick = {
+                                            onClearAllSelected?.invoke()
+                                        },
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.DeleteForever,
+                                            contentDescription = null,
+                                            tint = LocalTextStyle.current.color,
+                                        )
+                                    }
+                                }
+
+                                IconButton(
+                                    onClick = {
+                                    },
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.ChevronRight,
+                                        contentDescription = null,
+                                        tint = LocalTextStyle.current.color,
+                                    )
+                                }
+                            },
+                        ) {
+                            items(
+                                key = { it.hashCode() },
+                                count = item.tags.size,
+                            ) { index ->
+                                val tag = item.tags[index]
+                                FilterChip(
+                                    onClick = {
+                                        onClickTag?.invoke(tag)
+                                    },
+                                    selected = tag.isSelected,
+                                    selectedIcon = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Done,
+                                            contentDescription = "Done icon",
+                                            modifier = Modifier.size(FilterChipDefaults.IconSize),
+                                        )
+                                    },
+                                ) {
+                                    Text(
+                                        text = tag.tagValue,
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -115,37 +218,51 @@ fun GalleryImageFlow(
                         horizontalArrangement = Arrangement.spacedBy(spacing),
                     ) {
                         item.images.forEach { image ->
-                            AsyncImage(
-                                model = if (shouldLoad) {
-                                    ImageRequest.Builder(LocalContext.current)
-                                        .allowRgb565(true)
-                                        .allowHardware(true)
-                                        .size(image.width / 3, image.height / 3)
-                                        .precision(Precision.INEXACT)
-                                        .diskCachePolicy(CachePolicy.ENABLED)
-                                        .memoryCachePolicy(CachePolicy.ENABLED)
-                                        .crossfade(true)
-                                        .lifecycle(LocalLifecycleOwner.current)
-                                        .data(image.url)
-                                        .build()
+                            /*val source: Any =
+                                if (image.hasThumbnail && imageCache.isExist(image.id.toString())) {
+                                    image
                                 } else {
-                                    ImageRequest.Builder(LocalContext.current)
+                                    image.url
+                                }*/
+                            val context = LocalContext.current
+                            val lifecycleOwner = LocalLifecycleOwner.current
+
+                            val requestBuilder by remember {
+                                mutableStateOf(
+                                    ImageRequest.Builder(context)
                                         .allowRgb565(true)
                                         .allowHardware(true)
-                                        .size(image.width / 50, image.height / 50)
                                         .precision(Precision.INEXACT)
                                         .diskCachePolicy(CachePolicy.ENABLED)
                                         .memoryCachePolicy(CachePolicy.ENABLED)
                                         .crossfade(true)
-                                        .data(image.url)
-                                        .lifecycle(LocalLifecycleOwner.current)
-                                        .build()
-                                },
+                                        .lifecycle(lifecycleOwner),
+                                )
+                            }
+
+                            /*val request by remember(key1 = shouldLoad, key2 = image) {
+                                derivedStateOf {
+                                    when {
+                                        image.hasThumbnail -> {
+                                            requestBuilder.data(source).build()
+                                        }
+
+                                        else -> {
+                                            requestBuilder.size(image.width / 3, image.height / 3)
+                                                .data(source).build()
+                                        }
+                                    }
+                                }
+                            }*/
+
+                            AsyncImage(
+                                model = requestBuilder.size(image.width / 3, image.height / 3)
+                                    .data(image.url).build(),
                                 contentDescription = "",
                                 modifier = Modifier
                                     .fillMaxHeight()
                                     .width(
-                                        width = (item.height.toDouble() / image.height * image.width)
+                                        width = (item.height.toDouble() * image.aspectRatio)
                                             .toInt()
                                             .pxToDp().dp,
                                     )

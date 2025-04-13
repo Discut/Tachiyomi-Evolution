@@ -133,7 +133,11 @@ class TagSettingsSheet(
         when {
             tagVo == TagSettingsViewModel.PLUS_TAG -> {
                 scope.launchUI {
-                    TagNewDialog().show(activity) { scope.launchIO { viewModel.createNewTag(it) } }
+                    TagNewDialog().show(activity) {
+                        scope.launchIO {
+                            viewModel.createNewTag(it)
+                        }
+                    }
                 }
             }
 

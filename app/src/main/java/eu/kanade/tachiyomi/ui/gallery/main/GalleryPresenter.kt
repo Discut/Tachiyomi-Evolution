@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.ui.gallery
+package eu.kanade.tachiyomi.ui.gallery.main
 
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.gallery.GalleryManager
@@ -7,9 +7,13 @@ import eu.kanade.tachiyomi.model.TagBo
 import eu.kanade.tachiyomi.model.getDateTimeTag
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.ui.base.presenter.BaseCoroutinePresenter
+import eu.kanade.tachiyomi.ui.reader.sheet.TagVo
+import eu.kanade.tachiyomi.ui.reader.sheet.toTagVo
 import eu.kanade.tachiyomi.util.system.launchIO
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -22,10 +26,16 @@ class GalleryPresenter(
 ) : BaseCoroutinePresenter<GalleryController>() {
 
     val sourceImage: Flow<List<ImageBO>> by lazy {
-        (
+        /*(
             targetTag?.let { galleryManager.getAllImagesByTagIdAsFlow(it.tagId) }
                 ?: galleryManager.sourceImage
             ).map {
+            it.asSequence().sortedByDescending { it.cachedTimeMillis }.toList()
+        }*/
+
+        selectedTags.flatMapLatest { selectedTags ->
+            galleryManager.getAllImagesByTagIdsAsFlow(selectedTags.map { it.tagId })
+        }.map {
             it.asSequence().sortedByDescending { it.cachedTimeMillis }.toList()
         }
     }
@@ -34,6 +44,20 @@ class GalleryPresenter(
         MutableStateFlow(
             emptyMap(),
         )
+
+    val selectedTags = MutableStateFlow(targetTag?.let { listOf(it.toTagVo(true)) } ?: emptyList())
+
+    val tagsFlow: Flow<List<TagVo>>
+        get() {
+            return galleryManager.tagsFlow.combine(selectedTags) { tags, selectedTags ->
+                tags.map {
+                    it.toTagVo(
+                        selectedTags.any { selectedTag -> selectedTag.tagId == it.tagId },
+                    )
+                }
+                    .sortedBy { !it.isSelected }
+            }
+        }
 
     override fun onCreate() {
         super.onCreate()
@@ -44,6 +68,21 @@ class GalleryPresenter(
                     .groupBy { it.getDateTimeTag() }
                     .toSortedMap(compareByDescending { it }) // 按日期降序排序
             }
+        }
+    }
+
+    fun randomImageList(images: List<ImageBO>): List<ImageBO> {
+        return images.shuffled()
+    }
+
+    fun clickTag(tag: TagVo) {
+        val tagVos = selectedTags.value
+        if (tag.isSelected) {
+            selectedTags.value =
+                tagVos.filter { it.tagId != tag.tagId }
+        } else {
+            selectedTags.value =
+                (tagVos + tag).distinctBy { it.tagId }
         }
     }
 }
