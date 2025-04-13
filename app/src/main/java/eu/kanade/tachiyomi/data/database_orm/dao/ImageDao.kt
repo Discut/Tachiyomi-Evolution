@@ -48,4 +48,26 @@ interface ImageDao : BaseDao<DBImage> {
         "DELETE FROM ${ImageTagTable.TABLE} WHERE ${ImageTagTable.IMAGE_ID} = :imageId AND ${ImageTagTable.TAG_ID} = :tagId",
     )
     suspend fun deleteImageAndTags(imageId: Long, tagId: Long)
+
+    @Transaction
+    @Query(
+        """
+    SELECT i.* FROM ${ImageTable.TABLE} i
+    INNER JOIN ${ImageTagTable.TABLE} it ON i.${ImageTable.ID} = it.${ImageTagTable.IMAGE_ID}
+    WHERE it.${ImageTagTable.TAG_ID} IN (:tagIds)
+    GROUP BY i.${ImageTable.ID}
+    HAVING COUNT(DISTINCT it.${ImageTagTable.TAG_ID}) = :tagCount
+""",
+    )
+    fun getImagesWithAllTagsAsFlow(tagIds: List<Long>, tagCount: Int): Flow<List<DBImage>>
+
+    @Query(
+        "SELECT COUNT(*) FROM ${ImageTable.TABLE}",
+    )
+    fun count(): Long
+
+    @Query(
+        "SELECT ${ImageTagTable.IMAGE_ID} FROM ${ImageTable.TABLE} WHERE ${ImageTable.FILE_PATH} = :path",
+    )
+    fun getIdsByPath(path: String): List<Long>
 }

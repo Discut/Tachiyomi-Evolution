@@ -12,10 +12,13 @@ interface BaseDao<T> {
     @Update
     suspend fun update(entity: T): Int
 
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entity: T)
 
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertWithDeferred(entity: T)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(vararg entities: T)
 
     // 插入时自动替换已存在项
@@ -24,4 +27,7 @@ interface BaseDao<T> {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdate(entity: T)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertOrUpdateWithDeferred(entity: T)
 }

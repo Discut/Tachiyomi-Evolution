@@ -14,6 +14,8 @@ import eu.kanade.tachiyomi.data.database_orm.models.DBImage
 import eu.kanade.tachiyomi.data.database_orm.models.DBImageAndTag
 import eu.kanade.tachiyomi.data.database_orm.models.DBTag
 import eu.kanade.tachiyomi.data.database_orm.models.DBTagType
+import timber.log.Timber
+import java.util.concurrent.Executors
 
 @Database(
     entities = [
@@ -64,6 +66,12 @@ abstract class GalleryDatabase : RoomDatabase() {
             return Room
                 .databaseBuilder(context, GalleryDatabase::class.java, "gallery.db")
                 .addCallback(initCallback)
+                .setQueryCallback(
+                    { sql, params ->
+                        Timber.e("SQL: $sql")
+                    },
+                    Executors.newSingleThreadExecutor(),
+                )
                 .build()
         }
     }

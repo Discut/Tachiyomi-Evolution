@@ -4,6 +4,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.TypeConverters
+import eu.kanade.tachiyomi.data.database_orm.requireValue
 import java.util.Date
 
 /*
@@ -48,6 +49,6 @@ data class DBDiffGroup(
     init {
         // 业务层校验（双重保障）
         require(groupId.length == 36) { "Invalid UUIDv4 format" }
-        require(groupName.length >= 2) { "Group name too short" }
+        requireValue(groupName.length >= 2) { "名称太短" }
     }
 }

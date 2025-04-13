@@ -15,6 +15,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import eu.kanade.tachiyomi.data.database_orm.requireValue
 
 @Entity(
     tableName = "tags",
@@ -54,7 +55,7 @@ data class DBTag(
 ) {
     // 业务层二次校验
     init {
-        require(tagValue.length >= 2) { "Tag value must be at least 2 characters" }
+        requireValue(tagValue.length >= 2) { "标签长度不能小于2" }
         require(typeId > 0) { "Invalid type ID" }
     }
 }

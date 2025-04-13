@@ -32,4 +32,14 @@ interface TagDao : BaseDao<DBTag> {
         "SELECT * FROM ${TagTable.TABLE} WHERE ${TagTable.TAG_ID} = :tagId",
     )
     suspend fun getTagById(tagId: Long): DBTag?
+
+    @Query(
+        "SELECT * FROM ${TagTable.TABLE} WHERE ${TagTable.TAG_ID} = :tagId",
+    )
+    fun getTagByIdWithDeferred(tagId: Long): DBTag?
+
+    @Query(
+        "SELECT ${TagTable.TAG_ID} FROM ${TagTable.TABLE} WHERE ${TagTable.TAG_VALUE} = :name",
+    )
+    fun getIdsByName(name: String): List<Long>
 }

@@ -15,6 +15,7 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import eu.kanade.tachiyomi.data.database_orm.requireValue
 
 @Entity(
     tableName = "tag_types",
@@ -36,7 +37,7 @@ data class DBTagType(
     // 业务层二次校验
     init {
         require(typeId in 1..3) { "Invalid type ID: $typeId" }
-        require(typeName.isNotBlank()) { "Type name cannot be empty" }
+        requireValue(typeName.isNotBlank()) { "类型名称不能为空" }
     }
 
     // 预置类型枚举
