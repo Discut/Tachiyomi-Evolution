@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database_orm.GalleryDatabase
 import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.data.gallery.GalleryManager
+import eu.kanade.tachiyomi.data.gallery.ImageCache
 import eu.kanade.tachiyomi.data.library.CustomMangaManager
 import eu.kanade.tachiyomi.data.preference.AndroidPreferenceStore
 import eu.kanade.tachiyomi.data.preference.PreferenceStore
@@ -77,6 +78,10 @@ class AppModule(val app: Application) : InjektModule {
 
         addSingletonFactory {
             GalleryDatabase.getDatabase(app)
+        }
+
+        addSingletonFactory {
+            ImageCache(app)
         }
 
         // Asynchronously init expensive components for a faster cold start
