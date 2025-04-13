@@ -21,7 +21,6 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
@@ -37,11 +36,13 @@ import eu.kanade.tachiyomi.ui.base.controller.BaseCoroutineController
 import eu.kanade.tachiyomi.ui.gallery.ViewUtil
 import eu.kanade.tachiyomi.ui.gallery.component.GalleryImageFlow
 import eu.kanade.tachiyomi.ui.gallery.main.state.GalleryItem
+import eu.kanade.tachiyomi.ui.gallery.tags.TagsController
 import eu.kanade.tachiyomi.ui.main.RootSearchInterface
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.sheet.TagVo
 import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.toast
+import eu.kanade.tachiyomi.util.view.withFadeInTransaction
 import my.nanihadesuka.compose.InternalLazyColumnScrollbar
 import my.nanihadesuka.compose.ScrollbarSettings
 import my.nanihadesuka.compose.controller.LazyListStateController
@@ -145,6 +146,11 @@ class GalleryController(
                         onClearAllSelected = {
                             presenter.selectedTags.value = emptyList()
                         },
+                        onClickJumpToTags = {
+                            router.setRoot(
+                                TagsController().withFadeInTransaction().tag(TagsController.ID),
+                            )
+                        },
                         onClickTag = presenter::clickTag,
                     ) {
                         val galleryId = galleryManager.putTempGallery(imageBOList)
@@ -169,6 +175,7 @@ class GalleryController(
         isSelectedTags: Boolean = false,
         onRandomPlay: (() -> Unit)? = null,
         onClearAllSelected: (() -> Unit)? = null,
+        onClickJumpToTags: (() -> Unit)? = null,
         onClickTag: ((TagVo) -> Unit)? = null,
         onClickImage: ((ImageBO) -> Unit)? = null,
     ) {
@@ -254,6 +261,7 @@ class GalleryController(
                         widthPx.intValue = it.width
                     },
                 isSelectedTags = isSelectedTags,
+                onClickJumpToTags = onClickJumpToTags,
                 onClearAllSelected = onClearAllSelected,
                 onClickTag = onClickTag,
                 onRandomPlay = onRandomPlay,

@@ -3,18 +3,14 @@ package eu.kanade.tachiyomi.ui.gallery.component
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -41,21 +37,13 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.dimensionResource
-import androidx.compose.ui.text.PlatformTextStyle
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.size.Precision
-import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.model.ImageBO
 import eu.kanade.tachiyomi.model.getRealDate
 import eu.kanade.tachiyomi.ui.gallery.ViewUtil.pxToDp
@@ -72,6 +60,7 @@ fun GalleryImageFlow(
     isSelectedTags: Boolean = false,
     onClickTag: ((TagVo) -> Unit)? = null,
     onClearAllSelected: (() -> Unit)? = null,
+    onClickJumpToTags: (() -> Unit)? = null,
     onRandomPlay: (() -> Unit)? = null,
     shouldLoad: Boolean = true,
     onClickImage: ((ImageBO) -> Unit)? = null,
@@ -95,37 +84,11 @@ fun GalleryImageFlow(
         ) { index ->
             when (val item = items[index]) {
                 is GalleryItem.AppBar -> {
-                    val actionBarSize = dimensionResource(R.dimen.mainActionBarSize)
-
-                    Column(
-                        modifier = Modifier
-                            .padding(top = actionBarSize),
+                    TitleText(
+                        title = item.text,
                     ) {
-                        Text(
-                            text = item.text,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.headlineLarge.merge(
-                                TextStyle(
-                                    fontFamily = FontFamily.Default,
-                                    color = LocalTextStyle.current.color,
-                                    lineHeight = 32.sp, // 根据设计系统调整
-                                    platformStyle = PlatformTextStyle(includeFontPadding = false),
-                                ),
-                            ),
-                            modifier = Modifier
-                                .padding(
-                                    top = (
-                                        24 + WindowInsets.statusBars.getTop(
-                                            LocalDensity.current,
-                                        )
-                                        ).dp,
-                                )
-                                .heightIn(min = 48.dp),
-                        )
-
                         if (item.tags.isEmpty()) {
-                            return@Column
+                            return@TitleText
                         }
 
                         TagVerticalSelector(
@@ -160,6 +123,7 @@ fun GalleryImageFlow(
 
                                 IconButton(
                                     onClick = {
+                                        onClickJumpToTags?.invoke()
                                     },
                                 ) {
                                     Icon(
