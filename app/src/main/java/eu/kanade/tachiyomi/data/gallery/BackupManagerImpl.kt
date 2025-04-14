@@ -6,6 +6,7 @@ import eu.kanade.tachiyomi.data.database_orm.models.DBImageAndTag
 import eu.kanade.tachiyomi.data.database_orm.models.DBImageTagRelationForBackup
 import eu.kanade.tachiyomi.data.database_orm.models.DBTag
 import eu.kanade.tachiyomi.data.database_orm.models.DBTagType
+import eu.kanade.tachiyomi.data.database_orm.models.tagValueList
 import eu.kanade.tachiyomi.source.gallery.local.LocalGallerySource
 import eu.kanade.tachiyomi.util.generateTimestampBasedID
 import eu.kanade.tachiyomi.util.system.withIOContext
@@ -83,29 +84,38 @@ internal class BackupManagerImpl(
             val tagDao = room.getTagDao()
             val imageAndTagDao = room.getImageAndTagDao()
 
-            val allTagValues = relations.mapNotNull { it.tagValue }.distinct()
+            val allTagValues = relations.flatMap { it.tagValueList() }.distinct()
             val tagsMap = updateTags(tagDao, allTagValues).associate {
                 it.tagValue to it.tagId
             }
 
-            relations.forEachIndexed { index, relation ->
-                val tagValue = relation.tagValue
-                val tagId = tagsMap[tagValue]
-                val filePath = relation.filePath
-                tagId?.apply {
-                    val idsByPath = imageDao.getIdsByPath(filePath)
-                    if (idsByPath.isNotEmpty()) {
-                        imageDao.getById(idsByPath.first())?.apply {
-                            imageAndTagDao.insertOrUpdate(
-                                DBImageAndTag(
-                                    imageId = this.id,
-                                    tagId = tagId,
-                                ),
-                            )
-                        }
+            val tagToImages = mutableMapOf<String, List<String>>()
+            relations.forEach {
+                if (it.tagValueList().isNotEmpty()) {
+                    it.tagValueList().forEach { tag ->
+                        tagToImages[tag] = tagToImages[tag]?.plus(it.filePath) ?: listOf(it.filePath)
                     }
                 }
-                emitProgress(index + 1, relations.size)
+            }
+
+            tagToImages.forEach { (tag, images) ->
+                val tagId = tagsMap[tag]
+                images.forEach { image ->
+                    tagId?.apply {
+                        val idsByPath = imageDao.getIdsByPath(image)
+                        if (idsByPath.isNotEmpty()) {
+                            imageDao.getById(idsByPath.first())?.apply {
+                                imageAndTagDao.insertOrUpdate(
+                                    DBImageAndTag(
+                                        imageId = this.id,
+                                        tagId = tagId,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                    // emitProgress(index + 1, relations.size)
+                }
             }
             emit(BackupResult.Success("Restored ${relations.size} relations"))
         } catch (e: Exception) {
