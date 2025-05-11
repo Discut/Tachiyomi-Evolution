@@ -1078,4 +1078,13 @@
     <string name="rescan_gallery_summary">当前已发现 %s 张图片</string>
     <string name="gallery_can_be_used_to_restore">可用于恢复当前的图片记录</string>
     <string name="gallery_restore_from_backup_file">从备份文件中恢复当前的图片数据</string>
+    <string name="gallery_tag">图集标签</string>
+    <string name="quick_labeling">快捷打标签</string>
+    <string name="question_delete_images">从源头删除图片？</string>
+    <string name="confirm">确认</string>
+    <string name="dismiss">取消</string>
+    <string name="split">拆分</string>
+    <string name="merge">合并</string>
+    <string name="cannot_merge">不能合并，选中的图片不相似</string>
+    <string name="cannot_split">不能拆分，未选中差分组</string>
 </resources>

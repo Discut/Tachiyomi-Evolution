@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.gallery.component
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -24,9 +25,10 @@ import eu.kanade.tachiyomi.R
 @Composable
 fun TitleText(
     title: String,
+    paddingValues: PaddingValues = PaddingValues(),
     content: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
-    val actionBarSize = dimensionResource(R.dimen.mainActionBarSize)
+    val actionBarSize = dimensionResource(R.dimen.mainActionBarSize) - paddingValues.calculateTopPadding()
 
     Column(
         modifier = Modifier

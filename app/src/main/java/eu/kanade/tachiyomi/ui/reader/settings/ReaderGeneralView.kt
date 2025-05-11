@@ -53,6 +53,7 @@ class ReaderGeneralView @JvmOverloads constructor(context: Context, attrs: Attri
         binding.fullscreen.bindToPreference(preferences.fullscreen())
         binding.keepscreen.bindToPreference(preferences.keepScreenOn())
         binding.alwaysShowChapterTransition.bindToPreference(preferences.alwaysShowChapterTransition())
+        binding.quickLabeling.bindToPreference(preferences.quickLabeling())
     }
 
     /**

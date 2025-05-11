@@ -93,5 +93,13 @@
             android:layout_marginTop="16dp"
             android:text="@string/always_show_chapter_transition"
             android:textColor="?attr/colorOnBackground" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/quick_labeling"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/quick_labeling"
+            android:textColor="?attr/colorOnBackground" />
     </LinearLayout>
 </eu.kanade.tachiyomi.ui.reader.settings.ReaderGeneralView>

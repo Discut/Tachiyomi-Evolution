@@ -12,13 +12,13 @@ class GalleryBo : Manga {
 
     val manga = MangaImpl()
 
-    var images = listOf<ImageBO>()
+    var images = listOf<IImageBo>()
 
-    var curImage: ImageBO? = null
+    var curImage: IImageBo? = null
 
     override var id: Long? = -1
     override var source: Long
-        get() = curImage?.let { it.dbImage?.source } ?: -1
+        get() = curImage?.source ?: -1
         set(value) {}
 
     @Deprecated("Use `favorite` instead")

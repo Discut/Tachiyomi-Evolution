@@ -84,9 +84,9 @@ class ReaderChapterSheet @JvmOverloads constructor(context: Context, attrs: Attr
             binding.chapterRecycler.isClickable = sheetBehavior.isExpanded()
             binding.chapterRecycler.isFocusable = sheetBehavior.isExpanded()
 
-            binding.tagsContainer.tagsLinearLayout.alpha = if (sheetBehavior.isExpanded()) 1f else 0f
-            binding.tagsContainer.tagsLinearLayout.isClickable = sheetBehavior.isExpanded()
-            binding.tagsContainer.tagsLinearLayout.isFocusable = sheetBehavior.isExpanded()
+            // binding.tagsContainer.tagsLinearLayout.alpha = if (sheetBehavior.isExpanded()) 1f else 0f
+            // binding.tagsContainer.tagsLinearLayout.isClickable = sheetBehavior.isExpanded()
+            // binding.tagsContainer.tagsLinearLayout.isFocusable = sheetBehavior.isExpanded()
 
             val canShowNav = viewModel.getCurrentChapter()?.pages?.size ?: 1 > 1
             if (canShowNav) {
@@ -104,7 +104,7 @@ class ReaderChapterSheet @JvmOverloads constructor(context: Context, attrs: Attr
                     backgroundTintList =
                         ColorStateList.valueOf(lerpColor(primary, fullPrimary, trueProgress))
                     binding.chapterRecycler.alpha = trueProgress
-                    binding.tagsContainer.tagsLinearLayout.alpha = trueProgress
+                    // binding.tagsContainer.tagsLinearLayout.alpha = trueProgress
                     if (activity.sheetManageNavColor && progress > 0f) {
                         activity.window.navigationBarColor =
                             lerpColor(ColorUtils.setAlphaComponent(navPrimary, if (hasLightNav) 0 else 179), navPrimary, trueProgress)
@@ -145,7 +145,7 @@ class ReaderChapterSheet @JvmOverloads constructor(context: Context, attrs: Attr
                         }
                         activity.binding.readerNav.root.alpha = 0f
                         binding.chapterRecycler.alpha = 1f
-                        binding.tagsContainer.tagsLinearLayout.alpha = 1f
+                        // binding.tagsContainer.tagsLinearLayout.alpha = 1f
                         if (activity.sheetManageNavColor) {
                             activity.window.navigationBarColor =
                                 navPrimary
@@ -164,10 +164,10 @@ class ReaderChapterSheet @JvmOverloads constructor(context: Context, attrs: Attr
                         state == BottomSheetBehavior.STATE_EXPANDED
                     binding.chapterRecycler.isFocusable =
                         state == BottomSheetBehavior.STATE_EXPANDED
-                    binding.tagsContainer.tagsLinearLayout.isClickable =
-                        state == BottomSheetBehavior.STATE_EXPANDED
-                    binding.tagsContainer.tagsLinearLayout.isFocusable =
-                        state == BottomSheetBehavior.STATE_EXPANDED
+                    // binding.tagsContainer.tagsLinearLayout.isClickable =
+                    // state == BottomSheetBehavior.STATE_EXPANDED
+                    // binding.tagsContainer.tagsLinearLayout.isFocusable =
+                    // state == BottomSheetBehavior.STATE_EXPANDED
 
                     activity.reEnableBackPressedCallBack()
 

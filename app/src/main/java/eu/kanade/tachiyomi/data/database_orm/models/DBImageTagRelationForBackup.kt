@@ -10,3 +10,5 @@ data class DBImageTagRelationForBackup(
     @ColumnInfo(name = "tag_value")
     val tagValue: String?,
 )
+
+fun DBImageTagRelationForBackup.tagValueList(): List<String> = tagValue?.split(",") ?: emptyList()

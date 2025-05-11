@@ -140,6 +140,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended:$compose")
     implementation("androidx.compose.ui:ui-tooling-preview:$compose")
     debugImplementation("androidx.compose.ui:ui-tooling:$compose")
+    implementation("androidx.constraintlayout:constraintlayout-compose:1.1.1")
     implementation("com.google.accompanist:accompanist-webview:0.30.1")
     implementation("androidx.glance:glance-appwidget:1.0.0")
 
@@ -182,6 +183,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-common:$lifecycleVersion")
     implementation("androidx.lifecycle:lifecycle-process:$lifecycleVersion")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:$lifecycleVersion")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:$lifecycleVersion") // 协程与生命周期绑定
 
     // ReactiveX
     implementation("io.reactivex:rxandroid:1.2.1")

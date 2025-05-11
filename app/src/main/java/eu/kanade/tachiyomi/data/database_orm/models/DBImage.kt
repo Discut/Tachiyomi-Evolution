@@ -97,6 +97,11 @@ data class DBImage(
         defaultValue = "CURRENT_TIMESTAMP",
     )
     val modifiedAt: Date = Date(),
+
+    @ColumnInfo(
+        name = "is_hide",
+    )
+    val isHide: Boolean = false,
 ) {
     // 业务层二次校验（与数据库约束形成双重保障）
     init {

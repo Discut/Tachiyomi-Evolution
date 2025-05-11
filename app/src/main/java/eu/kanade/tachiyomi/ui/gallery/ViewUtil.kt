@@ -2,7 +2,7 @@ package eu.kanade.tachiyomi.ui.gallery
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalDensity
-import eu.kanade.tachiyomi.model.ImageBO
+import eu.kanade.tachiyomi.model.IImageBo
 import eu.kanade.tachiyomi.ui.gallery.main.state.GalleryItem
 import timber.log.Timber
 import kotlin.math.abs
@@ -47,7 +47,7 @@ object ViewUtil {
         screenWidth: Int,
         spacing: Int = 0,
         maxSize: Int = 8,
-        images: List<ImageBO>,
+        images: List<IImageBo>,
         acc: List<GalleryItem.Images> = emptyList(),
     ): List<GalleryItem.Images> {
         Timber.e("calculateImageRow: maxHeight=$maxHeight, minHeight=$minHeight, screenWidth=$screenWidth, spacing=$spacing, maxSize=$maxSize, images=${images.size}, acc=${acc.size}")
@@ -108,7 +108,7 @@ object ViewUtil {
         spacing: Int = 0,
         maxSize: Int = 8,
         curSize: Int = maxSize,
-        images: List<ImageBO>,
+        images: List<IImageBo>,
         acc: List<GalleryItem.Images> = emptyList(),
     ): List<GalleryItem.Images> {
         // Timber.e("calculateImageRow: minHeight=$minHeight, screenWidth=$screenWidth, spacing=$spacing, maxSize=$maxSize, images=${images.size}, acc=${acc.size}")
@@ -149,7 +149,7 @@ object ViewUtil {
     }
 
     // 优化后的宽度计算（防止除零错误）
-    private fun calculateImageWidth(images: List<ImageBO>, height: Int, spacing: Int): Int =
+    private fun calculateImageWidth(images: List<IImageBo>, height: Int, spacing: Int): Int =
         images.sumOf { img ->
             if (img.height == 0) 0 else (height * img.aspectRatio).toInt()
         } + spacing * (images.size - 1)

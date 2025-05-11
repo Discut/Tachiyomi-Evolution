@@ -39,6 +39,8 @@ object ImageTable {
 
     const val HEIGHT = "height"
 
+    const val IS_HIDE = "is_hide"
+
     val createTableQuery: String
         get() =
             """CREATE TABLE IF NOT EXISTS $TABLE(
@@ -50,6 +52,7 @@ object ImageTable {
             $FILE_SIZE INTEGER NOT NULL CHECK ($FILE_SIZE > 0),
             $CHECKSUM TEXT CHECK (length($CHECKSUM) = 64),
             $SOURCE INTEGER NOT NULL,
+            $IS_HIDE INTEGER NOT NULL DEFAULT 0,
             $EXIF_JSON TEXT,
             $CREATED_AT DATETIME NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')),
             $MODIFIED_AT DATETIME NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))

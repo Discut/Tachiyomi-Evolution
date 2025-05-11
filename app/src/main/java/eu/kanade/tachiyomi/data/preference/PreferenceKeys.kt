@@ -241,4 +241,12 @@ object PreferenceKeys {
     const val galleryIncludeDirs = "gallery_include_dirs"
 
     const val galleryExcludeDirs = "gallery_exclude_dirs"
+
+    const val quickLabeling = "quick_labeling"
+
+    const val isShowHideImgaes = "is_show_hide_images"
+
+    const val isMergeDiffImage = "is_merge_diff_image"
+
+    const val rowImageMaxSize = "row_image_max_size"
 }

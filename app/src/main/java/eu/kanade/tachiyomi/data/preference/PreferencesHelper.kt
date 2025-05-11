@@ -490,4 +490,12 @@ class PreferencesHelper(val context: Context) {
     fun getGalleryScanIncludes() = flowPrefs.getStringSet(Keys.galleryIncludeDirs, emptySet())
 
     fun getGalleryScanExcludes() = flowPrefs.getStringSet(Keys.galleryExcludeDirs, emptySet())
+
+    fun quickLabeling() = flowPrefs.getBoolean(Keys.quickLabeling, false)
+
+    fun isShowHideImages() = flowPrefs.getBoolean(Keys.isShowHideImgaes, true)
+
+    fun isMergeDiffImage() = flowPrefs.getBoolean(Keys.isMergeDiffImage, false)
+
+    fun getRowImageMaxSize() = flowPrefs.getInt(Keys.rowImageMaxSize, 7)
 }

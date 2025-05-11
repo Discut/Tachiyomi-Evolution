@@ -34,4 +34,6 @@ interface GallerySource {
     suspend fun collectImagesByTag(tag: STag, pageIndex: Int = 0, pageSize: Int): Page<SImage>
 
     suspend fun getAllImagesByTag(tag: STag): List<SImage>
+
+    suspend fun deleteImage(images: List<SImage>)
 }

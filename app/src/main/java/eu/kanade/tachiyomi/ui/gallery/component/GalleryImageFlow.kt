@@ -1,20 +1,20 @@
 package eu.kanade.tachiyomi.ui.gallery.component
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.ChipDefaults
 import androidx.compose.material.FilterChip
 import androidx.compose.material.Icon
 import androidx.compose.material.icons.Icons
@@ -29,22 +29,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.graphics.painter.ColorPainter
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import coil.compose.AsyncImage
-import coil.request.CachePolicy
-import coil.request.ImageRequest
-import coil.size.Precision
-import eu.kanade.tachiyomi.model.ImageBO
+import eu.kanade.tachiyomi.model.IImageBo
 import eu.kanade.tachiyomi.model.getRealDate
 import eu.kanade.tachiyomi.ui.gallery.ViewUtil.pxToDp
 import eu.kanade.tachiyomi.ui.gallery.main.state.GalleryItem
@@ -58,12 +50,14 @@ fun GalleryImageFlow(
     state: LazyListState = rememberLazyListState(),
     items: List<GalleryItem>,
     isSelectedTags: Boolean = false,
+    isSelectMode: Boolean = false,
+    selectedImages: Set<IImageBo> = emptySet(),
     onClickTag: ((TagVo) -> Unit)? = null,
     onClearAllSelected: (() -> Unit)? = null,
     onClickJumpToTags: (() -> Unit)? = null,
     onRandomPlay: (() -> Unit)? = null,
-    shouldLoad: Boolean = true,
-    onClickImage: ((ImageBO) -> Unit)? = null,
+    onLongClickImage: ((List<IImageBo>) -> Unit)? = null,
+    onClickImage: ((List<IImageBo>) -> Unit)? = null,
 ) {
     LazyColumn(
         state = state,
@@ -86,6 +80,7 @@ fun GalleryImageFlow(
                 is GalleryItem.AppBar -> {
                     TitleText(
                         title = item.text,
+                        paddingValues = contentPadding,
                     ) {
                         if (item.tags.isEmpty()) {
                             return@TitleText
@@ -144,17 +139,24 @@ fun GalleryImageFlow(
                                         onClickTag?.invoke(tag)
                                     },
                                     selected = tag.isSelected,
-                                    selectedIcon = {
-                                        Icon(
-                                            imageVector = Icons.Filled.Done,
-                                            contentDescription = "Done icon",
-                                            modifier = Modifier.size(FilterChipDefaults.IconSize),
-                                        )
+                                    leadingIcon = {
+                                        if (tag.isSelected) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Done,
+                                                contentDescription = "Done icon",
+                                                modifier = Modifier.size(FilterChipDefaults.IconSize),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
                                     },
+                                    colors = ChipDefaults.filterChipColors(
+                                        backgroundColor = MaterialTheme.colorScheme.surfaceContainer,
+                                    ),
                                 ) {
                                     Text(
                                         text = tag.tagValue,
                                         style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                             }
@@ -163,6 +165,9 @@ fun GalleryImageFlow(
                 }
 
                 is GalleryItem.Header -> {
+                    if (item.content.isEmpty()) {
+                        return@items
+                    }
                     Text(
                         text = item.text.getRealDate(),
                         style = LocalTextStyle.current.merge(
@@ -170,6 +175,18 @@ fun GalleryImageFlow(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
+                            .combinedClickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = {
+                                    if (isSelectMode) {
+                                        onClickImage?.invoke(item.content)
+                                    }
+                                },
+                                onLongClick = {
+                                    onLongClickImage?.invoke(item.content)
+                                },
+                            )
                             .padding(top = 72.dp, bottom = 16.dp),
                     )
                 }
@@ -182,16 +199,22 @@ fun GalleryImageFlow(
                         horizontalArrangement = Arrangement.spacedBy(spacing),
                     ) {
                         item.images.forEach { image ->
-                            /*val source: Any =
-                                if (image.hasThumbnail && imageCache.isExist(image.id.toString())) {
-                                    image
-                                } else {
-                                    image.url
-                                }*/
                             val context = LocalContext.current
                             val lifecycleOwner = LocalLifecycleOwner.current
 
-                            val requestBuilder by remember {
+                            ImageCompose(
+                                image = image,
+                                height = item.height,
+                                isSelected = isSelectMode && selectedImages.any { it.id == image.id },
+                                onClick = {
+                                    onClickImage?.invoke(listOf(image))
+                                },
+                                onLongClick = {
+                                    onLongClickImage?.invoke(listOf(image))
+                                },
+                            )
+
+                           /* val requestBuilder by remember {
                                 mutableStateOf(
                                     ImageRequest.Builder(context)
                                         .allowRgb565(true)
@@ -204,21 +227,6 @@ fun GalleryImageFlow(
                                 )
                             }
 
-                            /*val request by remember(key1 = shouldLoad, key2 = image) {
-                                derivedStateOf {
-                                    when {
-                                        image.hasThumbnail -> {
-                                            requestBuilder.data(source).build()
-                                        }
-
-                                        else -> {
-                                            requestBuilder.size(image.width / 3, image.height / 3)
-                                                .data(source).build()
-                                        }
-                                    }
-                                }
-                            }*/
-
                             AsyncImage(
                                 model = requestBuilder.size(image.width / 3, image.height / 3)
                                     .data(image.url).build(),
@@ -230,14 +238,23 @@ fun GalleryImageFlow(
                                             .toInt()
                                             .pxToDp().dp,
                                     )
-                                    .clickable {
-                                        onClickImage?.invoke(image)
-                                    },
+                                    .border(
+                                        width = if (isSelectMode && selectedImages.any { it.id == image.id }) 3.dp else 0.dp,
+                                        color = if (isSelectMode && selectedImages.any { it.id == image.id }) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                    )
+                                    .combinedClickable(
+                                        onClick = {
+                                            onClickImage?.invoke(listOf(image))
+                                        },
+                                        onLongClick = {
+                                            onLongClickImage?.invoke(listOf(image))
+                                        },
+                                    ),
                                 // 灰色占位符
                                 placeholder = ColorPainter(Color.DarkGray),
                                 filterQuality = FilterQuality.Low,
                                 contentScale = ContentScale.FillHeight,
-                            )
+                            )*/
                         }
                     }
                 }

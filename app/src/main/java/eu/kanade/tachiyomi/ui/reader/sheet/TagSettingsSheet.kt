@@ -23,6 +23,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.databinding.ReaderTagSettingsSheetBinding
+import eu.kanade.tachiyomi.model.IImageBo
 import eu.kanade.tachiyomi.model.ImageBO
 import eu.kanade.tachiyomi.util.system.launchIO
 import eu.kanade.tachiyomi.util.system.launchUI
@@ -38,7 +39,7 @@ import java.lang.ref.WeakReference
 
 class TagSettingsSheet(
     private val activity: Activity,
-    private val imageBO: ImageBO,
+    private val imageBO: IImageBo,
     private val searchTagCallback: ((TagVo) -> Unit)? = null,
 ) :
     BottomSheetDialog(activity) {
@@ -142,11 +143,15 @@ class TagSettingsSheet(
             }
 
             !tagVo.isSelected -> {
-                scope.launchIO { viewModel.relatedImageAndTag(imageBO, tagVo) }
+                if (imageBO is ImageBO) {
+                    scope.launchIO { viewModel.relatedImageAndTag(imageBO, tagVo) }
+                }
             }
 
             tagVo.isSelected -> {
-                scope.launchIO { viewModel.unrelatedImageAndTag(imageBO, tagVo) }
+                if (imageBO is ImageBO) {
+                    scope.launchIO { viewModel.unrelatedImageAndTag(imageBO, tagVo) }
+                }
             }
         }
     }

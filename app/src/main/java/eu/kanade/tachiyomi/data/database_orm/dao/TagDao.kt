@@ -24,6 +24,12 @@ interface TagDao : BaseDao<DBTag> {
 
     @Transaction
     @Query(
+        "SELECT * FROM ${TagTable.TABLE} ",
+    )
+    fun getTagsWithImagesAsFlow(): Flow<List<TagWithImages>>
+
+    @Transaction
+    @Query(
         "SELECT * FROM ${TagTable.TABLE} WHERE ${TagTable.TAG_ID} = :tagId",
     )
     fun getTagWithImagesAsFlow(tagId: Long): Flow<TagWithImages?>

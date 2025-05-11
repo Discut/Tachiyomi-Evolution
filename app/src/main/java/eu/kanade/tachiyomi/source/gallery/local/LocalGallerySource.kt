@@ -227,6 +227,19 @@ class LocalGallerySource(private val context: Context) : GallerySource, Unmetere
     override suspend fun getAllImagesByTag(tag: STag): List<SImage> {
         TODO("Not yet implemented")
     }
+
+    override suspend fun deleteImage(images: List<SImage>) {
+        try {
+            images.forEach {
+                val file = File(it.url)
+                if (file.exists()) {
+                    file.delete()
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 }
 
 private fun File.getImageDimensions(): Pair<Int, Int>? {

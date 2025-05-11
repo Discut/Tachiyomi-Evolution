@@ -35,4 +35,9 @@ GROUP BY i.${ImageTable.ID}
     """,
     )
     suspend fun getRelations(): List<DBImageTagRelationForBackup>
+
+    @Query(
+        "DELETE FROM ${ImageTagTable.TABLE} WHERE ${ImageTagTable.IMAGE_ID} IN (:imageIds)",
+    )
+    fun deleteByImages(vararg imageIds: Long)
 }

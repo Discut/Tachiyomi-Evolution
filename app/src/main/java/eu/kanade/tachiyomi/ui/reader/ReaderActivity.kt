@@ -38,6 +38,12 @@ import android.widget.TextView
 import androidx.activity.BackEventCompat
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
@@ -81,7 +87,10 @@ import eu.kanade.tachiyomi.data.preference.toggle
 import eu.kanade.tachiyomi.data.track.TrackService
 import eu.kanade.tachiyomi.databinding.ReaderActivityBinding
 import eu.kanade.tachiyomi.model.GalleryBo
+import eu.kanade.tachiyomi.model.TagBo
+import eu.kanade.tachiyomi.model.getTags
 import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.tachiyomi.theme.GalleryTheme
 import eu.kanade.tachiyomi.ui.base.MaterialMenuSheet
 import eu.kanade.tachiyomi.ui.base.activity.BaseActivity
 import eu.kanade.tachiyomi.ui.main.MainActivity
@@ -507,6 +516,39 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                             }
                         }
                     }
+            }
+        }
+
+        binding.tagsEditAndShowContainer.setContent {
+            GalleryTheme {
+                val isEnable by preferences.quickLabeling().asFlow().collectAsState(false)
+
+                if (isEnable.not()) {
+                    return@GalleryTheme
+                }
+
+                val currentPage by viewer?.currentPageAsFlow()?.collectAsState(null) ?: return@GalleryTheme
+                var tags by remember { mutableStateOf(emptyList<TagBo>()) }
+                var isLoaded by remember { mutableStateOf(false) }
+                LaunchedEffect(currentPage) {
+                    isLoaded = false
+                    tags = currentPage.tryGetImage()?.getTags() ?: emptyList()
+                    if (tags.isEmpty()) {
+                        isLoaded = false
+                        return@LaunchedEffect
+                    }
+                    delay(500)
+                    isLoaded = true
+                }
+                TagsAndEdit(
+                    tags = tags,
+                    isLoaded = isLoaded,
+                    onClickEdit = {
+                        currentPage?.apply {
+                            showMarkDialog(this)
+                        }
+                    },
+                )
             }
         }
     }

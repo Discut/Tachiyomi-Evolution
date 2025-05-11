@@ -26,6 +26,7 @@ class CoilSetup(context: Context) {
                     add(GifDecoder.Factory())
                 }
                 add(TachiyomiImageDecoder.Factory())
+                add(ImageCacheFetcher.Factory())
                 add(MangaCoverFetcher.Factory(lazy(callFactoryInit), lazy(diskCacheInit)))
                 add(MangaCoverKeyer())
             }

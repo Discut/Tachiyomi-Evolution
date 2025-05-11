@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.reader.sheet
 
 import android.app.Activity
 import eu.kanade.tachiyomi.data.gallery.GalleryManager
+import eu.kanade.tachiyomi.model.IImageBo
 import eu.kanade.tachiyomi.model.ImageBO
 import eu.kanade.tachiyomi.model.TagBo
 import eu.kanade.tachiyomi.util.system.withIOContext
@@ -14,7 +15,7 @@ import uy.kohesive.injekt.injectLazy
 
 class TagSettingsViewModel(
     private val activity: Activity,
-    private val imageBO: ImageBO,
+    private val imageBO: IImageBo,
 ) {
     val scope = CoroutineScope(Job() + Dispatchers.IO)
     private val galleryManager by injectLazy<GalleryManager>()

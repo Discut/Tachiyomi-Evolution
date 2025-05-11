@@ -5,6 +5,7 @@ import android.view.MotionEvent
 import android.view.View
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
+import kotlinx.coroutines.flow.Flow
 
 /**
  * Interface for implementing a viewer.
@@ -54,4 +55,6 @@ interface BaseViewer {
     fun handleGenericMotionEvent(event: MotionEvent): Boolean
 
     fun currentPage(): ReaderPage?
+
+    fun currentPageAsFlow(): Flow<ReaderPage?>
 }

@@ -1,19 +1,28 @@
 package eu.kanade.tachiyomi.data.gallery
 
 import android.content.Context
+import androidx.room.withTransaction
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database_orm.GalleryDatabase
+import eu.kanade.tachiyomi.data.database_orm.models.DBDiffGroup
+import eu.kanade.tachiyomi.data.database_orm.models.DBDiffGroupImage
 import eu.kanade.tachiyomi.data.database_orm.models.DBImage
 import eu.kanade.tachiyomi.data.database_orm.models.DBImageAndTag
+import eu.kanade.tachiyomi.data.gallery.request.MergeImageRequest
+import eu.kanade.tachiyomi.data.gallery.request.SplitImageRequest
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.model.GalleryBo
+import eu.kanade.tachiyomi.model.IImageBo
 import eu.kanade.tachiyomi.model.ImageBO
 import eu.kanade.tachiyomi.model.TagBo
+import eu.kanade.tachiyomi.model.UnionImageBO
 import eu.kanade.tachiyomi.model.toDBTag
 import eu.kanade.tachiyomi.model.toImageBO
 import eu.kanade.tachiyomi.model.toTagBo
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.source.gallery.model.toDBImage
+import eu.kanade.tachiyomi.source.gallery.model.toSImage
+import eu.kanade.tachiyomi.util.plus
 import eu.kanade.tachiyomi.util.system.launchIO
 import eu.kanade.tachiyomi.util.system.withIOContext
 import kotlinx.coroutines.CoroutineScope
@@ -25,16 +34,20 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import uy.kohesive.injekt.injectLazy
+import java.math.BigDecimal
 import java.time.LocalDateTime
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.util.Date
+import java.util.UUID
 import kotlin.random.Random
 
 /**
@@ -52,11 +65,11 @@ class GalleryManager(
 
     val sourceManager by injectLazy<SourceManager>()
 
-    var sourceImage: MutableStateFlow<List<ImageBO>> = MutableStateFlow(emptyList())
+    var sourceImage: MutableStateFlow<List<IImageBo>> = MutableStateFlow(emptyList())
 
     val preference: PreferencesHelper by injectLazy()
 
-    private val galleryMap = mutableMapOf<Long, List<ImageBO>>()
+    private val galleryMap = mutableMapOf<Long, List<IImageBo>>()
 
     val tagsFlow by lazy {
         room.getTagDao().getAllAsFlow().map {
@@ -64,17 +77,70 @@ class GalleryManager(
         }
     }
 
-    fun putTempGallery(images: List<ImageBO>, galleryId: Long = Random.nextLong()): Long {
+    init {
+        scope.launchIO {
+
+            preference.isMergeDiffImage().asFlow().flatMapLatest { isMergeDiffImage ->
+                if (isMergeDiffImage) {
+                    combine(
+                        room.getImageDao().getAllAsFlow(),
+                        room.getDiffGroupDao().getAllDiffImagesAsFlow(),
+                    ) { images, diffImage ->
+                        mergeWithUnassigned(
+                            images.filterPath(preference),
+                            diffImage,
+                        ).flatMap { it ->
+                            if (it.key == "") {
+                                it.value
+                            } else {
+                                listOf(
+                                    UnionImageBO(
+                                        it.value,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    room.getImageDao().getAllAsFlow()
+                        .map { it.filterPath(preference).map { it.toImageBO() } }
+                }
+            }.collectLatest {
+                sourceImage.value = it.sortedBy {
+                    it.modifiedAt
+                }
+            }
+
+            // 初始化db数据
+            /*            room.getImageDao().getAllAsFlow()
+                            .combine(preference.isMergeDiffImage().asFlow()) { images, isMergeDiffImage ->
+                                if (isMergeDiffImage) {
+                                    room.getDiffGroupDao().a
+                                } else images
+                            }.map {
+                                it.filterPath(preference)
+                                    .map { it.toImageBO(*/
+            /*cache.isExist(it.id.toString())*/
+            /*) }
+                            }.collectLatest {
+                                sourceImage.value = it.sortedBy {
+                                    it.dbImage.modifiedAt
+                                }
+                            }*/
+        }
+    }
+
+    fun putTempGallery(images: List<IImageBo>, galleryId: Long = Random.nextLong()): Long {
         galleryMap[galleryId] = images
 
         return galleryId
     }
 
-    fun getGallery(galleryId: Long): List<ImageBO> {
+    fun getGallery(galleryId: Long): List<IImageBo> {
         return galleryMap[galleryId] ?: emptyList()
     }
 
-    suspend fun getImageBo(imageId: Long): ImageBO? = withIOContext {
+    suspend fun getImageBo(imageId: Long): IImageBo? = withIOContext {
         val dbImage = room.getImageDao().getById(imageId) ?: return@withIOContext null
         return@withIOContext dbImage.toImageBO(cache.isExist(dbImage.id.toString()))
     }
@@ -99,8 +165,6 @@ class GalleryManager(
      */
     fun syncImages() = scope.launchIO {
         Timber.i("开始同步图集")
-        // 初始化db数据
-        pushDbData()
 
         val sources = sourceManager.getAllGallerySources()
         if (sources.isEmpty()) return@launchIO
@@ -120,7 +184,10 @@ class GalleryManager(
         }
 
         // 合并并插入数据库（去重处理）
-        val remoteImages = deferredResults.awaitAll().flatten().distinctBy { it.id }
+        val dbPaths = room.getImageDao().getAll().map { it.filePath }
+        val remoteImages = deferredResults.awaitAll().flatten().distinctBy { it.id }.filter {
+            it.filePath !in dbPaths
+        }
 
         room.getImageDao().insertOrUpdateAll(*remoteImages.toTypedArray())
 
@@ -132,15 +199,6 @@ class GalleryManager(
                 .takeIf { it.isNotEmpty() }
                 ?: emptyList()
         }
-        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-        // 使用预计算的时间戳优化排序
-        val sortedImages = localImages.sortedBy {
-            try {
-                LocalDateTime.parse(it.createdTime, formatter)
-            } catch (e: Exception) {
-                LocalDateTime.MIN
-            }
-        }
 
         // executeThumbnailJob(sortedImages)
 
@@ -150,7 +208,7 @@ class GalleryManager(
                 sourceImage.value = chunk
             }
         }*/
-        sourceImage.value = sortedImages
+        // sourceImage.value = sortedImages
     }
 
     /**
@@ -197,7 +255,7 @@ class GalleryManager(
     /**
      * 根据id获取图集
      */
-    fun getAllImagesByTagIdsAsFlow(tagIds: List<Long>): Flow<List<ImageBO>> {
+    fun getAllImagesByTagIdsAsFlow(tagIds: List<Long>): Flow<List<IImageBo>> {
         return if (tagIds.isEmpty()) {
             sourceImage
         } else {
@@ -215,6 +273,121 @@ class GalleryManager(
      */
     suspend fun countImages(): Long {
         return room.getImageDao().count()
+    }
+
+    /**
+     * 改变图片可见性
+     */
+    suspend fun changeImagesVisibility(images: List<IImageBo>, visible: Boolean) {
+        room.withTransaction {
+            images.flatMap {
+                when (it) {
+                    is ImageBO -> listOf(it)
+                    is UnionImageBO -> it.unions
+                    else -> emptyList()
+                }
+            }.map {
+                it.dbImage.copy(
+                    isHide = !visible,
+                )
+            }.forEach {
+                room.getImageDao().update(it)
+            }
+        }
+    }
+
+    suspend fun deleteImages(images: List<IImageBo>) {
+        if (images.isEmpty()) {
+            return
+        }
+        val images = images.flatMap {
+            when (it) {
+                is ImageBO -> listOf(it)
+                is UnionImageBO -> it.unions
+                else -> emptyList()
+            }
+        }
+        room.withTransaction {
+            images.forEach {
+                room.getImageAndTagDao().deleteByImages(it.id)
+                room.getImageDao().delete(it.dbImage)
+            }
+        }
+
+        images.groupBy { it.source }.forEach { (source, imageBOS) ->
+            sourceManager.getGallerySource(source)?.let {
+                it.deleteImage(imageBOS.map { bo -> bo.dbImage.toSImage() }.toList())
+            }
+        }
+    }
+
+    suspend fun mergeImages(request: MergeImageRequest) {
+        if (request.images.isEmpty()) {
+            return
+        }
+        val diffGroupDao = room.getDiffGroupDao()
+
+        room.withTransaction {
+            val (diffGroup, merged) = if (request.target == null) {
+                val diffGroup = DBDiffGroup(
+                    groupId = UUID.randomUUID().toString(),
+                    groupName = request.diffGroupName.ifEmpty { "合并图集" },
+                    createdAt = request.createDate,
+                )
+                diffGroupDao.insert(diffGroup)
+                diffGroup to emptyList<Long>()
+            } else {
+                val dbDiffGroupImages = diffGroupDao.getByImageId(request.target.unions.first().id)
+                if (dbDiffGroupImages.isEmpty()) {
+                    return@withTransaction
+                }
+                val group = diffGroupDao.getGroupById(dbDiffGroupImages.first().groupId)
+                    ?: return@withTransaction
+                group to request.target.unions.map { it.id }
+            }
+
+            val groupImages = diffGroupDao.getByGroupId(diffGroup.groupId)
+            val sortOrder = if (groupImages.isEmpty()) {
+                BigDecimal(1000)
+            } else {
+                groupImages.last().sortOrder
+            }
+            val waitMerge = request.images.filter { it.id !in merged }
+
+            val dbDiffGroupImageList = waitMerge.mapIndexed { index, imageBO ->
+                DBDiffGroupImage(
+                    groupId = diffGroup.groupId,
+                    imageId = imageBO.id,
+                    sortOrder = sortOrder + (index + 1) * 1000,
+                )
+            }
+            diffGroupDao.insertAllImages(*dbDiffGroupImageList.toTypedArray())
+        }
+    }
+
+    suspend fun splitDiffGroup(request: SplitImageRequest) {
+        val diffGroupDao = room.getDiffGroupDao()
+        if (request.targets.isEmpty()) {
+            return
+        }
+
+        room.withTransaction {
+            request.targets.forEach {
+                if (it.unions.isEmpty()) {
+                    return@forEach
+                }
+                val dbDiffGroupImages = diffGroupDao.getByImageId(
+                    it.unions.first().id,
+                )
+                if (dbDiffGroupImages.isEmpty()) {
+                    return@forEach
+                }
+
+                val group =
+                    diffGroupDao.getGroupById(dbDiffGroupImages.first().groupId) ?: return@forEach
+                diffGroupDao.delete(group)
+            }
+        }
     }
 
     // 扩展函数形式
@@ -291,18 +464,75 @@ class GalleryManager(
     /**
      * 推送本地图集数据到缓存
      */
-    private fun pushDbData() = scope.launchIO {
-        val localImages =
-            room.getImageDao().getAll()
-                .filterPath(preference)
-                .map { it.toImageBO(cache.isExist(it.id.toString())) }
-
-        val allImages =
-            localImages // localSource?.collectImages(1, 50) ?: Page<SImage>(0, 0, 0, emptyList())
-        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-        sourceImage.value = allImages
-            .sortedBy {
+    private suspend fun pushDbData() {
+        room.getImageDao().getAllAsFlow().map {
+            it.filterPath(preference)
+                .map { it.toImageBO(/*cache.isExist(it.id.toString())*/) }
+        }.collectLatest {
+            sourceImage.value = it.sortedBy {
                 it.dbImage.modifiedAt
             }
+        }
+
+        /*        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                // 使用预计算的时间戳优化排序
+                val sortedImages = localImages.sortedBy {
+                    try {
+                        LocalDateTime.parse(it.createdTime, formatter)
+                    } catch (e: Exception) {
+                        LocalDateTime.MIN
+                    }
+                }
+                sourceImage.value = sortedImages*/
+        /*        val localImages =
+                    room.getImageDao().getAll()
+                        .filterPath(preference)
+                        .map { it.toImageBO(cache.isExist(it.id.toString())) }
+
+                val allImages =
+                    localImages // localSource?.collectImages(1, 50) ?: Page<SImage>(0, 0, 0, emptyList())
+                val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+                sourceImage.value = allImages
+                    .sortedBy {
+                        it.dbImage.modifiedAt
+                    }*/
+    }
+
+    fun mergeWithUnassigned(
+        images: List<DBImage>,
+        relations: List<DBDiffGroupImage>,
+    ): Map<String, List<ImageBO>> {
+        // 构建快速查找关系（O(n)时间复杂度）
+        val imageMap = images.associateBy { it.id } // 网页2的映射优化
+
+        // 创建反向索引加速查找（O(m)预处理）
+        val imageHasGroup = relations.map { it.imageId }.toHashSet()
+
+        // 使用分组合并+默认组处理
+        return (relations + generateUnassigned(images, imageHasGroup))
+            .groupingBy { it.groupId }
+            .fold<DBDiffGroupImage, String, MutableList<ImageBO>>(
+
+                initialValueSelector = { _, _ -> mutableListOf() },
+                operation = { _, acc, relation ->
+                    imageMap[relation.imageId]?.let { acc.add(it.toImageBO(order = relation.sortOrder)) }
+                    acc
+                },
+
+            ).map {
+                it.key to it.value.sortedBy { it.order }
+            }.toMap()
+    }
+
+    // 生成未关联的虚拟关系对象
+    private fun generateUnassigned(
+        images: List<DBImage>,
+        existingIds: Set<Long>,
+    ): List<DBDiffGroupImage> {
+        return images
+            .asSequence()
+            .filter { it.id !in existingIds }
+            .map { DBDiffGroupImage(groupId = "", imageId = it.id, sortOrder = BigDecimal.ZERO) }
+            .toList()
     }
 }

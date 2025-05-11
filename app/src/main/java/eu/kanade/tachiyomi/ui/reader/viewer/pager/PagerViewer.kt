@@ -21,6 +21,9 @@ import eu.kanade.tachiyomi.ui.reader.viewer.BaseViewer
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import timber.log.Timber
 import uy.kohesive.injekt.injectLazy
 
@@ -54,6 +57,14 @@ abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer {
      * Currently active item. It can be a chapter page or a chapter transition.
      */
     private var currentPage: Any? = null
+        set(value) {
+            field = value
+            _currentPageFlow.update {
+                value as? ReaderPage
+            }
+        }
+
+    private val _currentPageFlow = MutableStateFlow<ReaderPage?>(null)
 
     /**
      * Viewer chapters to set when the pager enters idle mode. Otherwise, if the view was settling
@@ -515,4 +526,6 @@ abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer {
         }
         return null
     }
+
+    override fun currentPageAsFlow(): Flow<ReaderPage?> = _currentPageFlow
 }

@@ -4,7 +4,9 @@ import eu.kanade.tachiyomi.data.database.DatabaseHelper
 import eu.kanade.tachiyomi.data.database_orm.GalleryDatabase
 import eu.kanade.tachiyomi.model.TagBo
 import eu.kanade.tachiyomi.model.toDBTag
+import eu.kanade.tachiyomi.model.toImageBO
 import eu.kanade.tachiyomi.model.toTagBo
+import eu.kanade.tachiyomi.ui.gallery.tags.TagVo
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import uy.kohesive.injekt.injectLazy
@@ -32,6 +34,22 @@ internal class TagManagerImpl : ITagManager {
     override fun getAllTagsByImageId(imageId: Long): Flow<List<TagBo>> {
         return room.getImageDao().getImageWithTagsAsFlow(imageId).map { it ->
             it?.tags?.map { it.toTagBo() } ?: emptyList()
+        }
+    }
+
+    override fun getAllTagsAsFlow(): Flow<List<TagBo>> {
+        return room.getTagDao().getAllAsFlow().map { it -> it.map { it.toTagBo() } }
+    }
+
+    override fun getAllTagsVoAsFlow(): Flow<List<TagVo>> {
+        return room.getTagDao().getTagsWithImagesAsFlow().map { date ->
+            date.map {
+                TagVo(
+                    tagId = it.tag.tagId,
+                    name = it.tag.tagValue,
+                    images = if (it.images.isNullOrEmpty()) emptyList() else it.images.map { it.toImageBO() },
+                )
+            }
         }
     }
 }

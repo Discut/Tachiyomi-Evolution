@@ -77,6 +77,15 @@
         android:visibility="gone"
         tools:visibility="visible" />
 
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/tags_edit_and_show_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="20dp"
+        app:layout_anchor="@id/viewer_container"
+        app:layout_anchorGravity="bottom|end"
+        tools:layout_height="30dp" />
+
     <FrameLayout
         android:id="@+id/nav_layout"
         android:layout_width="match_parent"

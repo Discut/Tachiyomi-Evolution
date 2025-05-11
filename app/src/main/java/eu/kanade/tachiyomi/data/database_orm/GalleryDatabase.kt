@@ -4,12 +4,17 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
+import eu.kanade.tachiyomi.data.database_orm.dao.DiffGroupImageDao
 import eu.kanade.tachiyomi.data.database_orm.dao.ImageAndTagDao
 import eu.kanade.tachiyomi.data.database_orm.dao.ImageDao
 import eu.kanade.tachiyomi.data.database_orm.dao.TagDao
 import eu.kanade.tachiyomi.data.database_orm.dao.TagTypeDao
+import eu.kanade.tachiyomi.data.database_orm.migrations.migrationObjets
+import eu.kanade.tachiyomi.data.database_orm.models.BigDecimalConverter
 import eu.kanade.tachiyomi.data.database_orm.models.DBDiffGroup
+import eu.kanade.tachiyomi.data.database_orm.models.DBDiffGroupImage
 import eu.kanade.tachiyomi.data.database_orm.models.DBImage
 import eu.kanade.tachiyomi.data.database_orm.models.DBImageAndTag
 import eu.kanade.tachiyomi.data.database_orm.models.DBTag
@@ -24,10 +29,12 @@ import java.util.concurrent.Executors
         DBImageAndTag::class,
         DBTag::class,
         DBTagType::class,
+        DBDiffGroupImage::class,
     ],
-    version = 1,
+    version = 3,
     exportSchema = false,
 )
+@TypeConverters(BigDecimalConverter::class)
 abstract class GalleryDatabase : RoomDatabase() {
 
     abstract fun getImageDao(): ImageDao
@@ -37,6 +44,8 @@ abstract class GalleryDatabase : RoomDatabase() {
     abstract fun getTagTypeDao(): TagTypeDao
 
     abstract fun getImageAndTagDao(): ImageAndTagDao
+
+    abstract fun getDiffGroupDao(): DiffGroupImageDao
 
     companion object {
         // 数据库初始化配置
@@ -65,6 +74,7 @@ abstract class GalleryDatabase : RoomDatabase() {
         fun getDatabase(context: Context): GalleryDatabase {
             return Room
                 .databaseBuilder(context, GalleryDatabase::class.java, "gallery.db")
+                .addMigrations(*migrationObjets.toTypedArray())
                 .addCallback(initCallback)
                 .setQueryCallback(
                     { sql, params ->
