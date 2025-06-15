@@ -29,6 +29,7 @@ import eu.kanade.tachiyomi.model.TagBo
 import eu.kanade.tachiyomi.theme.GalleryTheme
 import eu.kanade.tachiyomi.ui.base.controller.BaseCoroutineController
 import eu.kanade.tachiyomi.ui.gallery.component.GalleryCompose
+import eu.kanade.tachiyomi.ui.gallery.diffgroup.DiffGroupController
 import eu.kanade.tachiyomi.ui.gallery.tags.TagsController
 import eu.kanade.tachiyomi.ui.main.RootSearchInterface
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
@@ -155,7 +156,10 @@ class GalleryController(
                             presenter.selectedTags.value = emptyList()
                         },
                         onClickJumpToTags = {
-                            router.setRoot(
+                            /*router.setRoot(
+                                TagsController().withFadeInTransaction().tag(TagsController.ID),
+                            )*/
+                            router.pushController(
                                 TagsController().withFadeInTransaction().tag(TagsController.ID),
                             )
                         },
@@ -185,6 +189,12 @@ class GalleryController(
                         },
                         onMergeImages = {
                             presenter.mergeImages(it)
+                        },
+                        onEditUnionImage = {
+                            router.pushController(
+                                DiffGroupController(it.diffGroupId).withFadeInTransaction()
+                                    .tag(DiffGroupController.TAG),
+                            )
                         },
                     )
                 }

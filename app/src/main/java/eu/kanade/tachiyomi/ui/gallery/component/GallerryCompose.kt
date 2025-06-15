@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.gallery.component
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -21,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.FloatingActionButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Settings
@@ -86,6 +88,7 @@ fun GalleryCompose(
     onChangeImagesVisible: ((List<IImageBo>, Boolean) -> Unit)? = null,
     onSplitImages: ((List<UnionImageBO>) -> Unit)? = null,
     onMergeImages: ((List<IImageBo>) -> Unit)? = null,
+    onEditUnionImage: (UnionImageBO) -> Unit,
 ) {
     val preference: PreferencesHelper by remember {
         injectLazy()
@@ -104,6 +107,10 @@ fun GalleryCompose(
         derivedStateOf {
             selectedImages.isNotEmpty()
         }
+    }
+
+    BackHandler(enabled = isSelectMode) {
+        selectedImages.clear()
     }
 
     val isShowScrollToTop by remember {
@@ -293,6 +300,28 @@ fun GalleryCompose(
                         )
                     }
 
+                    AnimatedVisibility(
+                        visible = selectedImages.size == 1 && selectedImages.first() is UnionImageBO,
+                    ) {
+                        IconButton(
+                            onClick = {
+                                if (selectedImages.isEmpty() && selectedImages.first() !is UnionImageBO) {
+                                    return@IconButton
+                                }
+                                val bo = selectedImages.first()
+                                if (bo is UnionImageBO) {
+                                    onEditUnionImage.invoke(bo)
+                                }
+                            },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Edit,
+                                contentDescription = "edit",
+                                tint = LocalTextStyle.current.color,
+                            )
+                        }
+                    }
+
                     IconButton(
                         onClick = {
                             isShowMoreEditSheet = true
@@ -377,6 +406,7 @@ fun GalleryCompose(
             GalleryEditBottomSheet(
                 sheetState = sheetState,
                 selectedImages = selectedImages,
+                tags = tags,
                 onDeleteImages = {
                     isShowMoreEditSheet = false
                     onDeleteImages?.invoke(it.toList())

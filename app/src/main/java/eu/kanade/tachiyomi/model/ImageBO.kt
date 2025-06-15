@@ -1,8 +1,8 @@
 package eu.kanade.tachiyomi.model
 
 import androidx.compose.runtime.Immutable
-import eu.kanade.tachiyomi.data.database_orm.GalleryDatabase
-import eu.kanade.tachiyomi.data.database_orm.models.DBImage
+import eu.kanade.tachiyomi.data.orm.GalleryDatabase
+import eu.kanade.tachiyomi.data.orm.models.DBImage
 import eu.kanade.tachiyomi.source.gallery.local.LocalGallerySource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -83,6 +83,7 @@ class ImageBO(
 
 class UnionImageBO(
     val unions: List<ImageBO>,
+    val diffGroupId: String,
 ) : IImageBo {
 
     init {

@@ -79,7 +79,7 @@ fun ImageCompose(
                     .allowRgb565(true)
                     .allowHardware(true)
                     .precision(Precision.INEXACT)
-                    .diskCachePolicy(CachePolicy.ENABLED)
+                    .diskCachePolicy(CachePolicy.DISABLED)
                     .memoryCachePolicy(CachePolicy.ENABLED)
                     .crossfade(true)
                     .lifecycle(lifecycleOwner),
@@ -113,8 +113,8 @@ fun ImageCompose(
         } else {
             AsyncImage(
                 modifier = Modifier.fillMaxSize(),
-                model = requestBuilder.size(image.width / 3, image.height / 3)
-                    .data(image.url).build(),
+                model = requestBuilder // .size(image.width / 3, image.height / 3)
+                    .data(image).build(),
                 contentDescription = "",
                 // 灰色占位符
                 placeholder = ColorPainter(Color.DarkGray),

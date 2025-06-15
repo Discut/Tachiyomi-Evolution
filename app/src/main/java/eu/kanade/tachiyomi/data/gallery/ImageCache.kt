@@ -38,12 +38,19 @@ class ImageCache(
         }
     }
 
+    fun delete(key: String) {
+        cache.remove(key)
+    }
+
     init {
         val externalStorages = DiskUtil.getExternalStorages(context)
         val diskCacheDir = if (externalStorages.isEmpty()) {
             File(context.cacheDir, DISK_IMAGE_CACHE_NAME) // context.cacheDir
         } else {
-            File(externalStorages.first().absolutePath, DISK_IMAGE_CACHE_NAME)
+            File(
+                externalStorages.first().absolutePath,
+                context.getString(eu.kanade.tachiyomi.R.string.app_name) + File.separator + DISK_IMAGE_CACHE_NAME,
+            )
         }
 
         if (!diskCacheDir.exists()) {

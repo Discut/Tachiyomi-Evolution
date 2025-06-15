@@ -3,13 +3,13 @@ package eu.kanade.tachiyomi.data.gallery
 import android.content.Context
 import androidx.room.withTransaction
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
-import eu.kanade.tachiyomi.data.database_orm.GalleryDatabase
-import eu.kanade.tachiyomi.data.database_orm.models.DBDiffGroup
-import eu.kanade.tachiyomi.data.database_orm.models.DBDiffGroupImage
-import eu.kanade.tachiyomi.data.database_orm.models.DBImage
-import eu.kanade.tachiyomi.data.database_orm.models.DBImageAndTag
 import eu.kanade.tachiyomi.data.gallery.request.MergeImageRequest
 import eu.kanade.tachiyomi.data.gallery.request.SplitImageRequest
+import eu.kanade.tachiyomi.data.orm.GalleryDatabase
+import eu.kanade.tachiyomi.data.orm.models.DBDiffGroup
+import eu.kanade.tachiyomi.data.orm.models.DBDiffGroupImage
+import eu.kanade.tachiyomi.data.orm.models.DBImage
+import eu.kanade.tachiyomi.data.orm.models.DBImageAndTag
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.model.GalleryBo
 import eu.kanade.tachiyomi.model.IImageBo
@@ -32,14 +32,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import uy.kohesive.injekt.injectLazy
@@ -56,7 +52,8 @@ import kotlin.random.Random
 class GalleryManager(
     val context: Context,
 ) : ITagManager by TagManagerImpl(),
-    IBackupManager by BackupManagerImpl() {
+    IBackupManager by BackupManagerImpl(),
+    IThumbnailCreator by ThumbnailCreatorImpl() {
     val db by injectLazy<DatabaseHelper>()
     val room by injectLazy<GalleryDatabase>()
     val cache by injectLazy<ImageCache>()
@@ -95,7 +92,8 @@ class GalleryManager(
                             } else {
                                 listOf(
                                     UnionImageBO(
-                                        it.value,
+                                        diffGroupId = it.key,
+                                        unions = it.value,
                                     ),
                                 )
                             }
@@ -436,67 +434,6 @@ class GalleryManager(
 
     // 处理路径结尾斜杠一致性
     private fun String.addSuffixIfNeeded() = if (endsWith('/')) this else "$this/"
-
-    /**
-     * 执行缩略图任务
-     */
-    private fun executeThumbnailJob(images: List<ImageBO>) = scope.launchIO {
-        processImageBatches(images, 5)
-            .onEach { result ->
-                when (result) {
-                    is ProcessResult.BatchComplete -> {
-                        Timber.i("完成批次${result.batchId}")
-                        /*showToast()
-                        updateProgressBar()*/
-                    }
-
-                    is ProcessResult.Error -> {
-                        Timber.e("批次${result.batchId}出错")
-                        Timber.e(result.exception)
-                    }
-                }
-            }
-            .flowOn(Dispatchers.Main)
-            .catch { e -> Timber.e(e) }
-            .collect()
-    }
-
-    /**
-     * 推送本地图集数据到缓存
-     */
-    private suspend fun pushDbData() {
-        room.getImageDao().getAllAsFlow().map {
-            it.filterPath(preference)
-                .map { it.toImageBO(/*cache.isExist(it.id.toString())*/) }
-        }.collectLatest {
-            sourceImage.value = it.sortedBy {
-                it.dbImage.modifiedAt
-            }
-        }
-
-        /*        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-                // 使用预计算的时间戳优化排序
-                val sortedImages = localImages.sortedBy {
-                    try {
-                        LocalDateTime.parse(it.createdTime, formatter)
-                    } catch (e: Exception) {
-                        LocalDateTime.MIN
-                    }
-                }
-                sourceImage.value = sortedImages*/
-        /*        val localImages =
-                    room.getImageDao().getAll()
-                        .filterPath(preference)
-                        .map { it.toImageBO(cache.isExist(it.id.toString())) }
-
-                val allImages =
-                    localImages // localSource?.collectImages(1, 50) ?: Page<SImage>(0, 0, 0, emptyList())
-                val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-                sourceImage.value = allImages
-                    .sortedBy {
-                        it.dbImage.modifiedAt
-                    }*/
-    }
 
     fun mergeWithUnassigned(
         images: List<DBImage>,

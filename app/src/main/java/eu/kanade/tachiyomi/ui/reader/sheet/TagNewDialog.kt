@@ -8,8 +8,8 @@ import android.widget.Filter
 import android.widget.Filterable
 import android.widget.TextView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import eu.kanade.tachiyomi.data.database_orm.GalleryDatabase
 import eu.kanade.tachiyomi.data.gallery.GalleryManager
+import eu.kanade.tachiyomi.data.orm.GalleryDatabase
 import eu.kanade.tachiyomi.databinding.TagNewDialogBinding
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.source.gallery.local.LocalGallerySource

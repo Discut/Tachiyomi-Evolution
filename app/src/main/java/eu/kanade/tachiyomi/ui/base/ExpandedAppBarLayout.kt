@@ -379,6 +379,7 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
         }
     }
 
+    // offsett: Int, /*scrollView: ScrollingView?,*/ cancelAnim: Boolean = true
     /**
      * Update the views in appbar based on its current Y position
      *
@@ -386,7 +387,7 @@ class ExpandedAppBarLayout@JvmOverloads constructor(context: Context, attrs: Att
      * past the app bar's height, match the Y to the recyclerView's offset
      * @param cancelAnim if true, cancel the current snap animation
      */
-    fun updateAppBarAfterY(offsett: Int, /*scrollView: ScrollingView?,*/ cancelAnim: Boolean = true) {
+    fun updateAppBarAfterY(offsett: Int, cancelAnim: Boolean = true) {
         if (cancelAnim) {
             yAnimator?.cancel()
         }

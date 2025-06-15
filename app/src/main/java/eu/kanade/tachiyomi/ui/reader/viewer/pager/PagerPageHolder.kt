@@ -58,7 +58,7 @@ import kotlin.math.roundToInt
  * View of the ViewPager that contains a page of a chapter.
  */
 @SuppressLint("ViewConstructor")
-class PagerPageHolder(
+open class PagerPageHolder(
     val viewer: PagerViewer,
     val page: ReaderPage,
     private var extraPage: ReaderPage? = null,

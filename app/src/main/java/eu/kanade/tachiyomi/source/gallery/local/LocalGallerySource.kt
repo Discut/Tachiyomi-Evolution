@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.source.gallery.model.ImageStream
 import eu.kanade.tachiyomi.source.gallery.model.Page
 import eu.kanade.tachiyomi.source.gallery.model.SImage
 import eu.kanade.tachiyomi.source.gallery.model.STag
+import eu.kanade.tachiyomi.util.getImageDimensions
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.tachiyomi.util.system.ImageUtil
 import eu.kanade.tachiyomi.util.system.withDefContext
@@ -80,18 +81,21 @@ class LocalGallerySource(private val context: Context) : GallerySource, Unmetere
         val options = BitmapFactory.Options().apply {
             inJustDecodeBounds = true
         }
+        val bufferedStream = imageStream.buffered().apply { mark(Int.MAX_VALUE) }
         val (width, height) = try {
             withDefContext {
-                BitmapFactory.decodeStream(imageStream, null, options)
+                BitmapFactory.decodeStream(bufferedStream, null, options)
                 options.outWidth to options.outHeight
             }
         } catch (e: Exception) {
             return@withIOContext null
+        } finally {
+            bufferedStream.reset()
         }
         ImageStream(
             width = width,
             height = height,
-            originStream = imageStream,
+            originStream = bufferedStream,
         )
     }
 
@@ -122,7 +126,8 @@ class LocalGallerySource(private val context: Context) : GallerySource, Unmetere
                         mkdirs() // 确保目录存在
                     }
                 }
-            }.toList()/*
+            }.toList()
+            /*
             return (listOf(File(File.separator)) + DiskUtil.getExternalStorages(context).toList())
                 .map { c ->
                     includedPaths.map { File(c.absolutePath, it) }
@@ -239,17 +244,5 @@ class LocalGallerySource(private val context: Context) : GallerySource, Unmetere
         } catch (e: Exception) {
             e.printStackTrace()
         }
-    }
-}
-
-private fun File.getImageDimensions(): Pair<Int, Int>? {
-    val options = BitmapFactory.Options().apply {
-        inJustDecodeBounds = true
-    }
-    return try {
-        BitmapFactory.decodeFile(this.absolutePath, options)
-        options.outWidth to options.outHeight
-    } catch (e: Exception) {
-        null
     }
 }

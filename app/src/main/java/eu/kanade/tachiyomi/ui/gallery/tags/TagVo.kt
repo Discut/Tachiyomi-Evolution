@@ -7,4 +7,10 @@ data class TagVo(
     val name: String,
     val images: List<IImageBo> = emptyList(),
     var cover: IImageBo? = null,
-)
+) {
+    init {
+        if (cover == null && images.isNotEmpty()) {
+            cover = images[0]
+        }
+    }
+}

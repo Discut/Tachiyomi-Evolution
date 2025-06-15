@@ -1,12 +1,12 @@
 package eu.kanade.tachiyomi.data.gallery
 
-import eu.kanade.tachiyomi.data.database_orm.GalleryDatabase
-import eu.kanade.tachiyomi.data.database_orm.dao.TagDao
-import eu.kanade.tachiyomi.data.database_orm.models.DBImageAndTag
-import eu.kanade.tachiyomi.data.database_orm.models.DBImageTagRelationForBackup
-import eu.kanade.tachiyomi.data.database_orm.models.DBTag
-import eu.kanade.tachiyomi.data.database_orm.models.DBTagType
-import eu.kanade.tachiyomi.data.database_orm.models.tagValueList
+import eu.kanade.tachiyomi.data.orm.GalleryDatabase
+import eu.kanade.tachiyomi.data.orm.dao.TagDao
+import eu.kanade.tachiyomi.data.orm.models.DBImageAndTag
+import eu.kanade.tachiyomi.data.orm.models.DBImageTagRelationForBackup
+import eu.kanade.tachiyomi.data.orm.models.DBTag
+import eu.kanade.tachiyomi.data.orm.models.DBTagType
+import eu.kanade.tachiyomi.data.orm.models.tagValueList
 import eu.kanade.tachiyomi.source.gallery.local.LocalGallerySource
 import eu.kanade.tachiyomi.util.generateTimestampBasedID
 import eu.kanade.tachiyomi.util.system.withIOContext

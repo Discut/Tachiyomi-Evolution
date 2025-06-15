@@ -1,6 +1,6 @@
 package eu.kanade.tachiyomi.source.gallery.model
 
-import eu.kanade.tachiyomi.data.database_orm.models.DBImage
+import eu.kanade.tachiyomi.data.orm.models.DBImage
 import eu.kanade.tachiyomi.util.toDate
 
 open class SImage(

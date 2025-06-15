@@ -3,9 +3,10 @@ package eu.kanade.tachiyomi.data.gallery
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
-import eu.kanade.tachiyomi.model.ImageBO
+import eu.kanade.tachiyomi.model.IImageBo
 import eu.kanade.tachiyomi.source.SourceManager
 import eu.kanade.tachiyomi.source.gallery.model.toSImage
+import eu.kanade.tachiyomi.util.dbImage
 import eu.kanade.tachiyomi.util.system.withIOContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -27,7 +28,7 @@ import java.io.InputStream
 
 // 1. 定义处理流程
 fun processImageBatches(
-    jobList: List<ImageBO>,
+    jobList: List<IImageBo>,
     batchSize: Int,
     maxConcurrentBatches: Int = 2,
 ): Flow<ProcessResult> = channelFlow {
@@ -42,19 +43,25 @@ fun processImageBatches(
         launch {
             try {
                 val results = batch.map { image ->
+                    val dbImage = image.dbImage()
                     async(Dispatchers.Default) {
+                        val startTime = System.currentTimeMillis()
+                        if (imageCache.isExist(image.id.toString())) {
+                            Timber.d("缩略图 ${image.id} 已存在")
+                            return@async ProcessedResult.Success(image.id.toString())
+                        }
                         try {
                             val sourceImage = withIOContext {
                                 sourceManager.getGallerySource(image.source)
-                                    ?.getImageStream(image.dbImage.toSImage())
+                                    ?.getImageStream(dbImage.toSImage())
                             }
-                                ?: throw Exception("Image not found, current image: ${image.dbImage.filePath}")
+                                ?: throw Exception("Image not found, current image: ${dbImage.filePath}")
 
                             // CPU 计算（如滤镜处理）
                             val lowQualityImage = compressImageStream(
                                 sourceImage.originStream,
-                                image.dbImage.width / 5,
-                                image.dbImage.height / 5,
+                                dbImage.width / 5,
+                                dbImage.height / 5,
                             )
 
                             withContext(Dispatchers.IO) {
@@ -67,6 +74,8 @@ fun processImageBatches(
                             ProcessedResult.Success(image.id.toString())
                         } catch (e: Exception) {
                             ProcessedResult.Failure(image.id.toString(), e)
+                        } finally {
+                            Timber.d("生成缩略图 ${image.id} 耗时 ${System.currentTimeMillis() - startTime}")
                         }
                     }
                 }.awaitAll()

@@ -1,6 +1,6 @@
 package eu.kanade.tachiyomi.model
 
-import eu.kanade.tachiyomi.data.database_orm.models.DBTag
+import eu.kanade.tachiyomi.data.orm.models.DBTag
 
 data class TagBo(
     val tagId: Long,

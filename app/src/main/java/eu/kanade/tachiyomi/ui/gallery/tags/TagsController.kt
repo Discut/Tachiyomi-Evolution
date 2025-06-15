@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.gallery.tags
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.foundation.clickable
@@ -35,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -46,6 +48,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.PlatformTextStyle
@@ -55,17 +58,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.gallery.GalleryManager
 import eu.kanade.tachiyomi.databinding.GalleryControllerBinding
 import eu.kanade.tachiyomi.theme.GalleryTheme
 import eu.kanade.tachiyomi.ui.base.controller.BaseCoroutineController
-import eu.kanade.tachiyomi.ui.gallery.main.GalleryController
 import eu.kanade.tachiyomi.ui.main.RootSearchInterface
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.util.generateTimestampBasedID
-import eu.kanade.tachiyomi.util.view.withFadeInTransaction
+import eu.kanade.tachiyomi.util.system.pxToDp
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import kotlin.math.ceil
@@ -99,6 +102,10 @@ class TagsController(
                     TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
                 val isCollapsed by remember {
                     derivedStateOf { scrollBehavior.state.collapsedFraction > 0.5f }
+                }
+
+                BackHandler {
+                    router.popCurrentController()
                 }
                 Scaffold(
                     modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -141,7 +148,8 @@ class TagsController(
                             navigationIcon = {
                                 IconButton(
                                     onClick = {
-                                        router.setRoot(GalleryController().withFadeInTransaction())
+                                        // router.setRoot((lastController ?: GalleryController()).withFadeInTransaction())
+                                        router.popCurrentController()
                                     },
                                 ) {
                                     Icon(
@@ -151,7 +159,9 @@ class TagsController(
                                 }
                             },
                             actions = {
-                                IconButton(onClick = { /* do something */ }) {
+                                IconButton(onClick = {
+                                    // do something
+                                },) {
                                     Icon(
                                         imageVector = Icons.Filled.Menu,
                                         contentDescription = "Localized description",
@@ -226,6 +236,24 @@ internal fun Content(
             color = MaterialTheme.colorScheme.onBackground,
         ),
     ) {
+        val heights = remember { mutableStateListOf<Float>() }
+        val max = 60
+        fun addHeight(height: Float) {
+            if (heights.isNotEmpty() && heights.first() == height) {
+                return
+            }
+            if (heights.size >= max) {
+                heights.removeAt(0)
+            }
+            heights.add(height)
+        }
+
+        val realHeight by remember(heights) {
+            derivedStateOf {
+                heights.max()
+            }
+        }
+
         LazyVerticalGrid(
             modifier = modifier
                 .fillMaxWidth()
@@ -247,7 +275,12 @@ internal fun Content(
             items(count = top.size, key = { index -> top[index].tagId }) { index ->
                 val tag = top[index]
                 TagCollection.SQUARE(
-                    modifier = Modifier.animateItem(),
+                    modifier = Modifier
+                        .animateItem()
+                        .zIndex(2f)
+                        .onGloballyPositioned {
+                            addHeight(it.size.height.toFloat())
+                        },
                     tagVo = tag,
                     isExpended = tag == needExpandTag,
                     onClickPlay = {
@@ -264,43 +297,18 @@ internal fun Content(
             }
 
             item(span = { GridItemSpan(columns) }) {
-                LazyRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    items(
-                        count = needExpandTag.images.size,
-                        key = { index -> needExpandTag.images[index].id + needExpandTag.tagId },
-                    ) { index ->
-                        val image = needExpandTag.images[index]
-
-                        Surface(
-                            modifier = Modifier
-                                .animateItem()
-                                .aspectRatio(1f)
-                                .clip(MaterialTheme.shapes.extraSmall)
-                                .clickable {
-                                    onClickPlay.invoke(needExpandTag, index)
-                                },
-                        ) {
-                            AsyncImage(
-                                modifier = Modifier
-                                    .animateItem(),
-                                contentDescription = "",
-                                contentScale = ContentScale.Crop,
-                                model = image.url,
-                                filterQuality = FilterQuality.Low,
-                            )
-                        }
-                    }
-                }
+                ImageView(
+                    realHeight = realHeight,
+                    needExpandTag = needExpandTag,
+                    onClickPlay = onClickPlay,
+                )
             }
             items(count = bottom.size, key = { index -> bottom[index].tagId }) { index ->
                 val tag = bottom[index]
                 TagCollection.SQUARE(
-                    modifier = Modifier.animateItem(),
+                    modifier = Modifier
+                        .animateItem()
+                        .zIndex(2f),
                     tagVo = tag,
                     onClickPlay = {
                         onClickPlay.invoke(tag, 0)
@@ -323,4 +331,46 @@ fun Preview() {
         onClickTag = {
         },
     )
+}
+
+@Composable
+fun ImageView(
+    modifier: Modifier = Modifier,
+    realHeight: Float,
+    needExpandTag: TagVo,
+    onClickPlay: ((TagVo, Int) -> Unit),
+) {
+    LazyRow(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(realHeight.pxToDp.dp)
+            .zIndex(1f),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        items(
+            count = needExpandTag.images.size,
+            key = { index -> needExpandTag.images[index].id + needExpandTag.tagId },
+        ) { index ->
+            val image = needExpandTag.images[index]
+
+            Surface(
+                modifier = Modifier
+                    .animateItem()
+                    .aspectRatio(1f)
+                    .clip(MaterialTheme.shapes.extraSmall)
+                    .clickable {
+                        onClickPlay.invoke(needExpandTag, index)
+                    },
+            ) {
+                AsyncImage(
+                    modifier = Modifier
+                        .animateItem(),
+                    contentDescription = "",
+                    contentScale = ContentScale.Crop,
+                    model = image.url,
+                    filterQuality = FilterQuality.Low,
+                )
+            }
+        }
+    }
 }

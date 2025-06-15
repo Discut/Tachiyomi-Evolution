@@ -6,43 +6,93 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import coil.ImageLoader
 import coil.decode.DataSource
+import coil.decode.ImageSource
 import coil.fetch.DrawableResult
 import coil.fetch.FetchResult
 import coil.fetch.Fetcher
+import coil.fetch.SourceResult
 import coil.request.Options
+import eu.kanade.tachiyomi.data.gallery.GalleryManager
+import eu.kanade.tachiyomi.model.IImageBo
 import eu.kanade.tachiyomi.model.ImageBO
+import eu.kanade.tachiyomi.model.UnionImageBO
 import eu.kanade.tachiyomi.source.SourceManager
+import eu.kanade.tachiyomi.source.gallery.model.SImage
 import eu.kanade.tachiyomi.source.gallery.model.toSImage
 import eu.kanade.tachiyomi.util.system.withIOContext
+import okio.BufferedSource
+import okio.buffer
+import okio.source
 import uy.kohesive.injekt.injectLazy
 import java.io.InputStream
 
 class ImageCacheFetcher(
-    private val data: ImageBO,
+    private val data: IImageBo,
     private val context: Context,
 ) : Fetcher {
     private val sourceManager: SourceManager by injectLazy()
+    private val galleryManager: GalleryManager by injectLazy()
 
     override suspend fun fetch(): FetchResult {
-        val stream = withIOContext {
-            sourceManager.getGallerySource(data.source)?.getImageStream(data.dbImage.toSImage())
-                ?: return@withIOContext null
+        val source = sourceManager.getGallerySource(data.source)
+        val sImage = when (data) {
+            is ImageBO -> data.dbImage.toSImage()
+            is UnionImageBO -> data.unions.first().dbImage.toSImage()
+            else -> {
+                error("Image not found")
+            }
         }
 
-        /*        withDefContext {
-                    BitmapFactory.decodeStream(stream)
-                }*/
+        try {
+            when (getResourceType(sImage)) {
+                Type.URL -> {
+                    val stream = withIOContext {
+                        source?.getImageStream(sImage) ?: return@withIOContext null
+                    }
+                    if (stream == null) {
+                        error("Image not found")
+                    }
+                    stream.apply {
+                        stream.originStream.toDrawable(context)
+                        return DrawableResult(
+                            drawable = stream.originStream.toDrawable(context)
+                                ?: error("Image not found"),
+                            isSampled = false,
+                            dataSource = DataSource.NETWORK,
+                        )
+                    }
+                }
 
-        if (stream == null) {
+                Type.File -> {
+                    val stream = withIOContext {
+                        galleryManager.getThumbnail(data)
+                    }
+                    return SourceResult(
+                        source = ImageSource(
+                            source = stream.toBufferedSource(),
+                            context = context,
+                        ),
+                        mimeType = "image/*",
+                        dataSource = DataSource.DISK,
+                    )
+                }
+
+                else -> error(
+                    "Image type not supported: ${getResourceType(sImage)}",
+                )
+            }
+        } catch (e: Exception) {
             error("Image not found")
         }
+    }
 
-        stream.apply {
-            return DrawableResult(
-                drawable = stream.originStream.toDrawable(context)!!,
-                isSampled = false,
-                dataSource = DataSource.DISK,
-            )
+    private fun getResourceType(sImage: SImage): Type? {
+        val url = sImage.url
+        return when {
+            url.isEmpty() -> null
+            url.startsWith("http") || url.startsWith("Custom-", true) -> Type.URL
+            url.startsWith("/") || url.startsWith("file://") -> Type.File
+            else -> null
         }
     }
 
@@ -51,6 +101,10 @@ class ImageCacheFetcher(
         override fun create(data: ImageBO, options: Options, imageLoader: ImageLoader): Fetcher {
             return ImageCacheFetcher(data, options.context)
         }
+    }
+
+    private enum class Type {
+        File, URL;
     }
 }
 
@@ -62,7 +116,9 @@ fun InputStream.toDrawable(context: Context): Drawable? {
         BitmapDrawable(context.resources, bitmap)
     } catch (e: Exception) {
         null
-    } finally {
-        this.close() // 必须关闭流防止泄漏[4,8](@ref)
     }
+}
+
+fun InputStream.toBufferedSource(): BufferedSource {
+    return this.source().buffer()
 }

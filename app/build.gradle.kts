@@ -320,6 +320,12 @@ dependencies {
     // scrollbar
     implementation("my.nanihadesuka.lazycolumnscrollbar:lazycolumnscrollbar:2.2.0-discut-1")
 
+    // reorder
+    //implementation("org.burnoutcrew.composereorderable:reorderable:0.9.6")
+
+    // reorder
+    implementation("sh.calvin.reorderable:reorderable:2.4.3")
+
 }
 
 tasks {

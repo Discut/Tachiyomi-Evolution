@@ -136,7 +136,7 @@ class GalleryPresenter(
             galleryManager.mergeImages(
                 MergeImageRequest(
                     diffGroupName = title,
-                    target = images.filterIsInstance<UnionImageBO>().firstOrNull() ?: return@launchIO,
+                    target = images.filterIsInstance<UnionImageBO>().firstOrNull(),
                     images = images.filterIsInstance<ImageBO>(),
                     headerImage = realHeader,
                 ),

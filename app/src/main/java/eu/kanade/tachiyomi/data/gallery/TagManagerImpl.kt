@@ -1,7 +1,7 @@
 package eu.kanade.tachiyomi.data.gallery
 
 import eu.kanade.tachiyomi.data.database.DatabaseHelper
-import eu.kanade.tachiyomi.data.database_orm.GalleryDatabase
+import eu.kanade.tachiyomi.data.orm.GalleryDatabase
 import eu.kanade.tachiyomi.model.TagBo
 import eu.kanade.tachiyomi.model.toDBTag
 import eu.kanade.tachiyomi.model.toImageBO

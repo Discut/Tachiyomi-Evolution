@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.model.IImageBo
 import eu.kanade.tachiyomi.model.UnionImageBO
+import eu.kanade.tachiyomi.ui.reader.sheet.TagVo
 import eu.kanade.tachiyomi.util.system.toast
 
 @Composable
@@ -47,6 +48,7 @@ fun GalleryEditBottomSheet(
     modifier: Modifier = Modifier,
     sheetState: SheetState = rememberModalBottomSheetState(),
     selectedImages: List<IImageBo>,
+    tags: List<TagVo> = emptyList(),
     onDeleteImages: ((List<IImageBo>) -> Unit)? = null,
     onHideImages: ((List<IImageBo>) -> Unit)? = null,
     onShowImages: ((List<IImageBo>) -> Unit)? = null,
@@ -143,6 +145,10 @@ fun GalleryEditBottomSheet(
                 text = "添加到标签",
                 modifier = Modifier.padding(vertical = 24.dp),
                 color = LocalTextStyle.current.color,
+            )
+            TagListCompose(
+                modifier = Modifier.padding(bottom = 16.dp),
+                tags = tags,
             )
         }
     }
