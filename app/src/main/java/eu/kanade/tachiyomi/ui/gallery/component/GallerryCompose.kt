@@ -31,6 +31,7 @@ import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -55,30 +56,31 @@ import eu.kanade.tachiyomi.data.preference.PreferencesHelper
 import eu.kanade.tachiyomi.model.IImageBo
 import eu.kanade.tachiyomi.model.UnionImageBO
 import eu.kanade.tachiyomi.model.getRealDate
-import eu.kanade.tachiyomi.ui.gallery.ViewUtil
 import eu.kanade.tachiyomi.ui.gallery.main.state.GalleryItem
 import eu.kanade.tachiyomi.ui.gallery.plus
 import eu.kanade.tachiyomi.ui.reader.sheet.TagVo
-import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.launchUI
 import eu.kanade.tachiyomi.util.system.pxToDp
 import my.nanihadesuka.compose.InternalLazyColumnScrollbar
 import my.nanihadesuka.compose.ScrollbarSettings
 import my.nanihadesuka.compose.controller.LazyListStateController
 import my.nanihadesuka.compose.controller.rememberLazyListStateController
+import timber.log.Timber
 import uy.kohesive.injekt.injectLazy
 import kotlin.math.abs
+import kotlin.math.min
 
 @Composable
 fun GalleryCompose(
     screenHeight: Int,
     modifier: Modifier = Modifier,
     paddingValues: PaddingValues = PaddingValues(),
-    appbarTitle: String,
     scrollState: LazyListState = rememberLazyListState(),
-    itemMap: Map<String, List<IImageBo>> = emptyMap(),
+    itemList: List<GalleryItem>,
+    isLoading: Boolean = true,
     tags: List<TagVo> = emptyList(),
     isSelectedTags: Boolean = false,
+    onSizeChanged: (Int) -> Unit,
     onRandomPlay: (() -> Unit)? = null,
     onClearAllSelected: (() -> Unit)? = null,
     onClickJumpToTags: (() -> Unit)? = null,
@@ -93,13 +95,8 @@ fun GalleryCompose(
     val preference: PreferencesHelper by remember {
         injectLazy()
     }
-    val widthPx = remember { mutableIntStateOf(0) }
-    val stableWidth by remember(widthPx.intValue) {
-        derivedStateOf {
-            val newWidth = widthPx.intValue // 从状态变量中获取最新值
-            if (abs(widthPx.intValue - newWidth) > 5) newWidth else widthPx.intValue
-        }
-    }
+    val rawWidth = remember { mutableIntStateOf(0) }
+    var lastStableWidth by remember { mutableIntStateOf(0) }
 
     val selectedImages = remember { mutableStateListOf<IImageBo>() }
 
@@ -153,41 +150,17 @@ fun GalleryCompose(
     )
 
     val scope = rememberCoroutineScope()
-
-    val compositeKey = remember(itemMap, rowImageMaxSize) {
-        itemMap.hashCode() xor rowImageMaxSize.hashCode()
-    }
-    val items by remember(key1 = stableWidth, key2 = compositeKey, key3 = tags.hashCode()) {
-        derivedStateOf {
-            val innerList: MutableList<GalleryItem> = mutableListOf()
-            itemMap.forEach { pair ->
-                val (title, images) = pair
-                innerList.add(GalleryItem.Header(title, images))
-                innerList.addAll(
-                    ViewUtil.calculateImageRowV2(
-                        minHeight = screenHeight / 7,
-                        maxHeight = (screenHeight / 2),
-                        screenWidth = stableWidth - 16.dpToPx,
-                        spacing = 4.dpToPx,
-                        maxSize = rowImageMaxSize,
-                        images = images,
-                        acc = emptyList(),
-                    ).map {
-                        it.text = title
-                        it
-                    },
-                )
-            }
-
-            appbarTitle.let {
-                innerList.add(0, GalleryItem.AppBar(text = it, tags = tags))
-            }
-            innerList
-        }
-    }
     Box(
         modifier = Modifier.fillMaxSize(),
     ) {
+        if (isLoading) {
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.secondary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+            )
+        }
+
         LazyColumnScrollbar(
             settings = settings,
             state = scrollState,
@@ -198,7 +171,7 @@ fun GalleryCompose(
             ),
             indicatorContent = { index, isThumbSelected ->
                 if (isThumbSelected) {
-                    val label = items.getOrNull(index)?.text ?: index.toString()
+                    val label = itemList.getOrNull(index)?.text ?: index.toString()
                     Text(
                         text = label.getRealDate(),
                         modifier = Modifier
@@ -217,7 +190,17 @@ fun GalleryCompose(
                 modifier = modifier
                     .padding(horizontal = 16.dp)
                     .onSizeChanged {
-                        widthPx.intValue = it.width
+                        Timber.d("onSizeChanged: width = ${it.width}")
+                        if (rawWidth.intValue == 0) {
+                            rawWidth.intValue = it.width
+                        } else {
+                            rawWidth.intValue = min(it.width, rawWidth.intValue)
+                        }
+
+                        if (abs(rawWidth.intValue - lastStableWidth) > 5) {
+                            lastStableWidth = rawWidth.intValue
+                            onSizeChanged(rawWidth.intValue)
+                        }
                     },
                 contentPadding = paddingValues,
                 isSelectedTags = isSelectedTags,
@@ -227,7 +210,7 @@ fun GalleryCompose(
                 onClearAllSelected = onClearAllSelected,
                 onClickTag = onClickTag,
                 onRandomPlay = onRandomPlay,
-                items = items,
+                items = itemList,
                 onClickImage = {
                     if (it.isEmpty()) {
                         return@GalleryImageFlow

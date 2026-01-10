@@ -141,15 +141,17 @@ fun GalleryEditBottomSheet(
                     vertical = 4.dp,
                 ),
             )
-            Text(
-                text = "添加到标签",
-                modifier = Modifier.padding(vertical = 24.dp),
-                color = LocalTextStyle.current.color,
-            )
-            TagListCompose(
-                modifier = Modifier.padding(bottom = 16.dp),
-                tags = tags,
-            )
+            if (tags.isNotEmpty()) {
+                Text(
+                    text = "添加到标签",
+                    modifier = Modifier.padding(vertical = 24.dp),
+                    color = LocalTextStyle.current.color,
+                )
+                TagListCompose(
+                    modifier = Modifier.padding(bottom = 16.dp),
+                    tags = tags,
+                )
+            }
         }
     }
 

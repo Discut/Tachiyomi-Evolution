@@ -45,6 +45,10 @@ import java.security.Security
 
 open class App : Application(), DefaultLifecycleObserver {
 
+    companion object {
+        var instance: App? = null
+    }
+
     val preferences: PreferencesHelper by injectLazy()
 
     private val disableIncognitoReceiver = DisableIncognitoReceiver()
@@ -52,6 +56,7 @@ open class App : Application(), DefaultLifecycleObserver {
     @SuppressLint("LaunchActivityFromNotification")
     override fun onCreate() {
         super<Application>.onCreate()
+        instance = this
         if (BuildConfig.DEBUG) Timber.plant(Timber.DebugTree())
 
         Thread.setDefaultUncaughtExceptionHandler(GlobalCrashHandler(this))

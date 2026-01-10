@@ -18,7 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.carousel.HorizontalUncontainedCarousel
 import androidx.compose.material3.carousel.rememberCarouselState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -96,8 +95,7 @@ fun ImageCompose(
                 val union = image.unions[index]
                 AsyncImage(
                     modifier = Modifier.fillMaxSize(),
-                    model = requestBuilder.size(image.width / 3, image.height / 3)
-                        .data(union.url).build(),
+                    model = requestBuilder.data(union).build(),
                     contentDescription = "",
                     // 灰色占位符
                     placeholder = ColorPainter(Color.DarkGray),
@@ -105,16 +103,10 @@ fun ImageCompose(
                     contentScale = ContentScale.FillHeight,
                 )
             }
-
-            DisposableEffect(Unit) {
-                onDispose {
-                }
-            }
         } else {
             AsyncImage(
                 modifier = Modifier.fillMaxSize(),
-                model = requestBuilder // .size(image.width / 3, image.height / 3)
-                    .data(image).build(),
+                model = requestBuilder.data(image).build(),
                 contentDescription = "",
                 // 灰色占位符
                 placeholder = ColorPainter(Color.DarkGray),

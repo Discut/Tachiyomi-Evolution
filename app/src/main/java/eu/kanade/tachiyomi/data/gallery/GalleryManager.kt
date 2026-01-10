@@ -128,6 +128,9 @@ class GalleryManager(
         }
     }
 
+    suspend fun getAllTags(): List<TagBo> {
+        return room.getTagDao().getAll().map { it.toTagBo() }
+    }
     fun putTempGallery(images: List<IImageBo>, galleryId: Long = Random.nextLong()): Long {
         galleryMap[galleryId] = images
 

@@ -69,6 +69,10 @@ abstract class BaseViewModel<S : UiState, E : UiEvent, F : UiEffect> :
         presenterScope.launch { _uiEffect.emit(effect) }
     }
 
+    protected fun sendEffect(effectBuild: () -> F) {
+        sendEffect(effectBuild())
+    }
+
     internal fun sendState(newState: S.() -> S) {
         _uiState.update {
             uiState.value.newState().apply {

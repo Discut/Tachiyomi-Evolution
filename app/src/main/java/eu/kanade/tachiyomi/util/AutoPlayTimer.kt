@@ -60,7 +60,7 @@ class AutoPlayTimer(
     sealed class DoTick {
         open fun doTick(currentProgress: Int, max: Int, progressBar: LinearProgressIndicator) {}
 
-        object PositivePlus : DoTick() {
+        data object PositivePlus : DoTick() {
             override fun doTick(
                 currentProgress: Int,
                 max: Int,
@@ -72,7 +72,7 @@ class AutoPlayTimer(
             }
         }
 
-        object NegativePlus : DoTick() {
+        data object NegativePlus : DoTick() {
             override fun doTick(
                 currentProgress: Int,
                 max: Int,
@@ -84,7 +84,7 @@ class AutoPlayTimer(
             }
         }
 
-        object PositiveMinus : DoTick() {
+        data object PositiveMinus : DoTick() {
             override fun doTick(
                 currentProgress: Int,
                 max: Int,
@@ -96,7 +96,7 @@ class AutoPlayTimer(
             }
         }
 
-        object NegativeMinus : DoTick() {
+        data object NegativeMinus : DoTick() {
             override fun doTick(
                 currentProgress: Int,
                 max: Int,

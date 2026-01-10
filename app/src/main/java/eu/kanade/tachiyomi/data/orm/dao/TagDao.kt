@@ -16,6 +16,11 @@ interface TagDao : BaseDao<DBTag> {
     )
     fun getAllAsFlow(): Flow<List<DBTag>>
 
+    @Query(
+        "SELECT * FROM ${TagTable.TABLE}",
+    )
+    suspend fun getAll(): List<DBTag>
+
     @Transaction
     @Query(
         "SELECT * FROM ${TagTable.TABLE} WHERE ${TagTable.TAG_ID} = :tagId",

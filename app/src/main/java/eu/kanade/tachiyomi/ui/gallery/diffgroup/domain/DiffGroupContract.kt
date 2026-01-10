@@ -20,12 +20,6 @@ sealed class DiffGroupState : UiState {
     ) : DiffGroupState()
 }
 
-data class Content(
-    val isLoading: Boolean = false,
-    val diffGroup: DBDiffGroup? = null,
-    val images: List<DiffImageVo>,
-) : DiffGroupState()
-
 sealed interface DiffGroupEvent : UiEvent {
     data class Init(val diffGroupId: String) : DiffGroupEvent
     data class ChangeOrder(val changed: List<DiffImageVo>, val original: List<DiffImageVo>) : DiffGroupEvent

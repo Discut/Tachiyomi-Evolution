@@ -10,5 +10,4 @@ class SlidePageHolder(
     viewer: PagerViewer,
     page: ReaderPage,
     private var extraPage: ReaderPage? = null,
-) : PagerPageHolder(viewer, page, extraPage) {
-}
+) : PagerPageHolder(viewer, page, extraPage)

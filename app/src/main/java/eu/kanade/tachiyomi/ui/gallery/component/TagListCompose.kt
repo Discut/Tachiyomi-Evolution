@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.ui.gallery.component
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -17,8 +19,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -27,6 +32,7 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.size.Precision
 import eu.kanade.tachiyomi.data.gallery.GalleryManager
+import eu.kanade.tachiyomi.model.IImageBo
 import eu.kanade.tachiyomi.ui.reader.sheet.TagVo
 import eu.kanade.tachiyomi.util.system.launchIO
 import kotlinx.coroutines.flow.first
@@ -40,7 +46,7 @@ fun TagListCompose(
     tags: List<TagVo>,
 ) {
     val tagMap = remember {
-        mutableStateMapOf<Long, String>()
+        mutableStateMapOf<Long, IImageBo?>()
     }
 
     val context = LocalContext.current
@@ -55,7 +61,7 @@ fun TagListCompose(
                 } else {
                     null
                 }
-                tagMap[it.tagId] = it.cover?.url ?: ""
+                tagMap[it.tagId] = it.cover
             }
         }
     }
@@ -66,7 +72,7 @@ fun TagListCompose(
                 .allowRgb565(false)
                 .allowHardware(true)
                 .precision(Precision.INEXACT)
-                .diskCachePolicy(CachePolicy.ENABLED)
+                .diskCachePolicy(CachePolicy.DISABLED)
                 .memoryCachePolicy(CachePolicy.ENABLED)
                 .crossfade(true)
                 .lifecycle(lifecycleOwner),
@@ -103,15 +109,34 @@ fun TagListCompose(
                     }
                     .graphicsLayer { alpha = 0.9f }*/
                 ) {
-                    AsyncImage(
-                        model = requestBuilder.data(tagMap[tags[it].tagId]).build(),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxWidth(),
-                        filterQuality = FilterQuality.Low,
-                        contentScale = ContentScale.Crop,
-                    )
+                    tagMap[tags[it].tagId]?.let {
+                        AsyncImage(
+                            model = requestBuilder.data(it).build(),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .fillMaxWidth(),
+                            filterQuality = FilterQuality.Low,
+                            contentScale = ContentScale.Crop,
+                        )
+                    }
                 }
+
+                // 渐变遮罩层
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 1f), // 左侧暗色
+                                    Color.Transparent, // 右侧透明
+                                ),
+                                startX = 0f,
+                                endX = LocalConfiguration.current.screenWidthDp * 0.8f, // 渐变覆盖70%宽度
+                            ),
+                        ),
+                )
+
                 Text(
                     text = tags[it].tagValue,
                     modifier = Modifier
