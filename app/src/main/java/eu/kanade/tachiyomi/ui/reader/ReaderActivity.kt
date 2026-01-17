@@ -110,10 +110,10 @@ import eu.kanade.tachiyomi.ui.reader.settings.ReaderBottomButton
 import eu.kanade.tachiyomi.ui.reader.settings.ReadingModeType
 import eu.kanade.tachiyomi.ui.reader.settings.TabbedReaderSettingsSheet
 import eu.kanade.tachiyomi.ui.reader.sheet.TagSettingsSheet
-import eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationDemo
 import eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationEngine
 import eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationPath
 import eu.kanade.tachiyomi.ui.reader.slide.engine.SlidePageHolder
+import eu.kanade.tachiyomi.ui.reader.slide.serializer.AnimationSequenceSaveManager
 import eu.kanade.tachiyomi.ui.reader.viewer.BaseViewer
 import eu.kanade.tachiyomi.ui.reader.viewer.KeyFrameTimelineView
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.L2RPagerViewer
@@ -160,6 +160,7 @@ import eu.kanade.tachiyomi.widget.doOnEnd
 import eu.kanade.tachiyomi.widget.doOnStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -277,6 +278,11 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
     // 当前页面的图片视图引用（用于获取变换状态）
     private var currentImageView: SubsamplingScaleImageView? = null
     private var currentPageHolder: SlidePageHolder? = null
+
+    // 动画序列保存管理器（
+    private val animationSaveManager = AnimationSequenceSaveManager(this)
+
+    private var loadAnimationJob: Job? = null
 
     companion object {
 
@@ -667,6 +673,12 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         // 刷新时间轴显示
         binding.keyFrameTimelineBody.invalidate()
 
+        // 同步到保存管理器并标记为已修改
+        currentAnimationPath?.let {
+            animationSaveManager.setCurrentAnimation(animationSaveManager.getCurrentImageId(), it)
+        }
+        animationSaveManager.markAsDirty()
+
         toast("已合并关键帧: ${currentTime / 1000f}s")
     }
 
@@ -702,6 +714,14 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
      * Called when the activity is destroyed. Cleans up the viewer, configuration and any view.
      */
     override fun onDestroy() {
+        // ============================================
+        // 退出阅读器时保存待保存的动画序列并释放资源
+        // ============================================
+        if (animationSaveManager.hasUnsavedChanges()) {
+            animationSaveManager.saveImmediately()
+        }
+        animationSaveManager.dispose()
+
         super.onDestroy()
         viewer?.destroy()
         binding.chaptersSheet.chaptersBottomSheet.adapter = null
@@ -1533,13 +1553,6 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         viewer = newViewer
         binding.viewerContainer.addView(newViewer.getView())
 
-        // ============================================
-        // 启用幻灯片动画效果
-        // ============================================
-        if (mode == ReaderMode.GALLERY) {
-            SlideAnimationDemo.enable()
-        }
-
         viewer?.setOnPageChangedListener(
             object : BaseViewer.OnPageChangedListener {
                 override fun onPageChanged(curPage: SlidePageHolder?) {
@@ -1547,62 +1560,111 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                         return
                     }
 
+                    // 页面切换时保存上一页的动画（如果有未保存的修改）
+                    if (animationSaveManager.hasUnsavedChanges()) {
+                        animationSaveManager.saveImmediately()
+                    }
+
                     // 保存当前页面引用
                     currentPageHolder = curPage
                     currentImageView = curPage.getImageView()
 
-                    val engine = curPage.animationEngine
+                    // 获取当前图片 ID
+                    val imageId = curPage.page.id ?: 0L
+
+                    if (imageId <= 0L || currentImageView == null) {
+                        return
+                    }
+
+                    val engine = curPage.animationEngine ?: run {
+                        curPage.animationEngine = SlideAnimationEngine(currentImageView, SlideAnimationPath.empty()).apply {
+                            onAnimationComplete = {
+                                curPage.onAnimationComplete?.invoke()
+                            }
+                        }
+                        curPage.animationEngine
+                    }
 
                     // 清理之前的回调
                     currentAnimationEngine?.onFrameUpdate = null
                     currentAnimationEngine = engine
 
-                    // 统一使用 SlideAnimationPath
-                    // 有动画时使用 engine.animationPath，无动画时使用 currentPageHolder.animationPath
-                    if (engine != null) {
-                        // 使用页面已有的动画路径数据
-                        currentAnimationPath = currentPageHolder?.animationPath
-                    } else {
-                        currentAnimationPath = engine?.animationPath
-                    }
+                    loadAnimationJob?.cancel("Launch new job")
 
-                    binding.keyFrameTimelineBody.adapter = object : KeyFrameTimelineView.TimelineAdapter {
-                        override fun getDuration() = currentAnimationPath?.durationMs ?: DEFAULT_DURATION
-
-                        override fun getCurrentPosition() = 0L // 统一模式下没有播放进度
-
-                        override fun getKeyFrames() = currentAnimationPath?.keyFrames?.map { it.timeMs } ?: listOf()
-
-                        override fun onSeekTo(position: Long) {
-                            // 只更新图片状态，不播放动画
-                            currentAnimationEngine?.apply {
-                                val stateAtTime = animationPath.getStateAtTime(position)
-                                applyState(stateAtTime)
+                    loadAnimationJob = scope.launchIO {
+                        // 加载该图片已保存的动画序列（如果存在）
+                        val savedPath = animationSaveManager.load(imageId)
+                        val animationPath = if (savedPath != null) {
+                            // 使用已保存的动画序列
+                            curPage.animationPath = savedPath
+                            engine?.animationPath = savedPath
+                            savedPath
+                        } else {
+                            // 没有已保存的动画，使用页面默认的
+                            if (engine != null) {
+                                currentPageHolder?.animationPath
+                            } else {
+                                engine?.animationPath
                             }
                         }
 
-                        override fun onTimelineExtensionRequest(currentDuration: Long): Long {
-                            // 时间轴扩展，每次增加 2 秒
-                            val newDuration = currentDuration + EXTENSION_STEP
+                        curPage.isAnimationEnabled = true
 
-                            // 更新当前动画路径的时长
-                            currentAnimationPath = currentAnimationPath?.copy(durationMs = newDuration)
+                        // 设置动画完成回调（可选）
+                        curPage.onAnimationComplete = {
+                            // 动画完成后的操作，例如自动翻页
+                            // holder.viewer.moveToNext()
+                        }
 
-                            return newDuration
+                        // 更新当前动画路径并同步到保存管理器
+                        currentAnimationPath = animationPath
+                        animationSaveManager.setCurrentAnimation(imageId, animationPath)
+
+                        withUIContext {
+                            binding.keyFrameTimelineBody.adapter = object : KeyFrameTimelineView.TimelineAdapter {
+                                override fun getDuration() = currentAnimationPath?.durationMs ?: DEFAULT_DURATION
+
+                                override fun getCurrentPosition() = 0L // 统一模式下没有播放进度
+
+                                override fun getKeyFrames() = currentAnimationPath?.keyFrames?.map { it.timeMs } ?: listOf()
+
+                                override fun onSeekTo(position: Long) {
+                                    // 只更新图片状态，不播放动画
+                                    currentAnimationEngine?.apply {
+                                        animationPath?.getStateAtTime(position)
+                                            ?.apply(this::applyState)
+                                    }
+                                }
+
+                                override fun onTimelineExtensionRequest(currentDuration: Long): Long {
+                                    // 时间轴扩展，每次增加 2 秒
+                                    val newDuration = currentDuration + EXTENSION_STEP
+
+                                    // 更新当前动画路径的时长
+                                    currentAnimationPath = currentAnimationPath?.copy(durationMs = newDuration)
+
+                                    // 同步到保存管理器并标记为已修改
+                                    currentAnimationPath?.let {
+                                        animationSaveManager.setCurrentAnimation(animationSaveManager.getCurrentImageId(), it)
+                                    }
+                                    animationSaveManager.markAsDirty()
+
+                                    return newDuration
+                                }
+                            }
+                            // 有动画时，保持原有的帧更新回调
+                            engine?.onFrameUpdate = { elapsedTimeMs ->
+                                val now = System.currentTimeMillis()
+                                // 节流：每 50ms 更新一次时间轴（20fps）
+                                if (now - lastTimelineUpdateTime >= TIMELINE_UPDATE_INTERVAL_MS) {
+                                    lastTimelineUpdateTime = now
+                                    binding.keyFrameTimelineBody.seekToTime(elapsedTimeMs)
+                                }
+                            }
+
+                            engine?.start()
                         }
                     }
-
-                    // 有动画时，保持原有的帧更新回调
-                    engine?.onFrameUpdate = { elapsedTimeMs ->
-                        val now = System.currentTimeMillis()
-                        // 节流：每 50ms 更新一次时间轴（20fps）
-                        if (now - lastTimelineUpdateTime >= TIMELINE_UPDATE_INTERVAL_MS) {
-                            lastTimelineUpdateTime = now
-                            binding.keyFrameTimelineBody.seekToTime(elapsedTimeMs)
-                        }
-                    }
-
-                    engine?.start()
                 }
             },
         )

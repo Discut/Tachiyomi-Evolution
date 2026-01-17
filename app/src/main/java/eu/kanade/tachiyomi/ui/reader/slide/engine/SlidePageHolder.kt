@@ -30,10 +30,7 @@ class SlidePageHolder(
     /**
      * 是否启用动画
      */
-    var isAnimationEnabled: Boolean = false
-        set(value) {
-            field = value
-        }
+    var isAnimationEnabled: Boolean = true
 
     /**
      * 动画完成回调
@@ -45,8 +42,8 @@ class SlidePageHolder(
     /**
      * 获取当前的图片视图，用于读取变换状态
      */
-    fun getImageView(): com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView? {
-        return pageView as? com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
+    fun getImageView(): SubsamplingScaleImageView? {
+        return pageView as? SubsamplingScaleImageView
     }
 
     override fun onImage() {
@@ -151,6 +148,7 @@ class SlidePageHolder(
      * @param type 动画类型
      * @param durationMs 动画时长
      */
+    @Deprecated("")
     fun setAnimationByType(type: AnimationType, durationMs: Long = 3000L) {
         val path = when (type) {
             AnimationType.SCALE_CENTER -> createScaleAnimationPath(

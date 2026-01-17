@@ -11,6 +11,11 @@ data class SlideAnimationPath(
     val durationMs: Long,
     val keyFrames: List<KeyFrame>,
 ) {
+
+    companion object {
+        fun empty() = SlideAnimationPath(5000L, emptyList())
+    }
+
     /**
      * 获取指定时间点的视图状态
      *

@@ -6,12 +6,14 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.sqlite.db.SupportSQLiteDatabase
+import eu.kanade.tachiyomi.data.orm.dao.AnimationSequenceDao
 import eu.kanade.tachiyomi.data.orm.dao.DiffGroupImageDao
 import eu.kanade.tachiyomi.data.orm.dao.ImageAndTagDao
 import eu.kanade.tachiyomi.data.orm.dao.ImageDao
 import eu.kanade.tachiyomi.data.orm.dao.TagDao
 import eu.kanade.tachiyomi.data.orm.dao.TagTypeDao
 import eu.kanade.tachiyomi.data.orm.migrations.migrationObjets
+import eu.kanade.tachiyomi.data.orm.models.AnimationSequence
 import eu.kanade.tachiyomi.data.orm.models.BigDecimalConverter
 import eu.kanade.tachiyomi.data.orm.models.DBDiffGroup
 import eu.kanade.tachiyomi.data.orm.models.DBDiffGroupImage
@@ -24,6 +26,7 @@ import java.util.concurrent.Executors
 
 @Database(
     entities = [
+        AnimationSequence::class,
         DBDiffGroup::class,
         DBImage::class,
         DBImageAndTag::class,
@@ -31,11 +34,13 @@ import java.util.concurrent.Executors
         DBTagType::class,
         DBDiffGroupImage::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 @TypeConverters(BigDecimalConverter::class)
 abstract class GalleryDatabase : RoomDatabase() {
+
+    abstract fun getAnimationSequenceDao(): AnimationSequenceDao
 
     abstract fun getImageDao(): ImageDao
 

@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.orm.migrations
 
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import eu.kanade.tachiyomi.data.database.tables.AnimationSequenceTable
 import eu.kanade.tachiyomi.data.database.tables.DiffGroupImageTable.GROUP_ID
 import eu.kanade.tachiyomi.data.database.tables.DiffGroupImageTable.IMAGE_ID
 import eu.kanade.tachiyomi.data.database.tables.DiffGroupImageTable.SORT_ORDER
@@ -44,6 +45,18 @@ val migrationObjets = listOf(
                 CREATE INDEX idx_diff_group_order ON diff_group_images ($SORT_ORDER);
                 """.trimIndent(),
             )
+        }
+    },
+
+    object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // 创建动画序列表
+            db.execSQL(AnimationSequenceTable.createTableQuery)
+
+            // 创建触发器（索引由 Room 自动创建）
+            AnimationSequenceTable.createTriggerStatements.forEach { sql ->
+                db.execSQL(sql)
+            }
         }
     },
 )

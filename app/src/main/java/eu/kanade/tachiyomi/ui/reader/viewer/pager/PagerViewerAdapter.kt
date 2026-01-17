@@ -8,7 +8,6 @@ import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 import eu.kanade.tachiyomi.ui.reader.slide.engine.OnHolderEvent
-import eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationDemo
 import eu.kanade.tachiyomi.ui.reader.slide.engine.SlidePageHolder
 import eu.kanade.tachiyomi.ui.reader.viewer.hasMissingChapters
 import eu.kanade.tachiyomi.util.system.launchUI
@@ -140,12 +139,6 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter(), 
             is ReaderPage -> {
                 // 使用SlidePageHolder替代PagerPageHolder以支持幻灯片动画
                 val holder = SlidePageHolder(viewer, item, item2 as? ReaderPage)
-
-                // 如果启用了全局幻灯片动画，自动配置动画
-                if (SlideAnimationDemo.isGlobalEnabled) {
-                    // 为holder设置动画
-                    SlideAnimationDemo.setup(holder, item, position)
-                }
 
                 holder.onHolderEvent = this
 
