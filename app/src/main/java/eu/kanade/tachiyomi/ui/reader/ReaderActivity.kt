@@ -15,7 +15,6 @@ import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
-import android.graphics.PointF
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.LayerDrawable
 import android.net.Uri
@@ -112,6 +111,8 @@ import eu.kanade.tachiyomi.ui.reader.settings.ReadingModeType
 import eu.kanade.tachiyomi.ui.reader.settings.TabbedReaderSettingsSheet
 import eu.kanade.tachiyomi.ui.reader.sheet.TagSettingsSheet
 import eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationDemo
+import eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationEngine
+import eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationPath
 import eu.kanade.tachiyomi.ui.reader.slide.engine.SlidePageHolder
 import eu.kanade.tachiyomi.ui.reader.viewer.BaseViewer
 import eu.kanade.tachiyomi.ui.reader.viewer.KeyFrameTimelineView
@@ -262,20 +263,20 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         }
 
     // 时间轴同步：当前动画引擎引用
-    private var currentAnimationEngine: eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationEngine? = null
+    private var currentAnimationEngine: SlideAnimationEngine? = null
 
     // 时间轴同步：上次更新时间（用于节流）
     private var lastTimelineUpdateTime = 0L
     private val TIMELINE_UPDATE_INTERVAL_MS = 50L // 每50ms更新一次（20fps）
 
     // 统一的时间轴数据管理
-    private var currentAnimationPath: eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationPath? = null
+    private var currentAnimationPath: SlideAnimationPath? = null
     private val DEFAULT_DURATION = 10000L // 默认时长 10 秒
     private val EXTENSION_STEP = 2000L // 每次扩展增加 2 秒
 
     // 当前页面的图片视图引用（用于获取变换状态）
-    private var currentImageView: com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView? = null
-    private var currentPageHolder: eu.kanade.tachiyomi.ui.reader.slide.engine.SlidePageHolder? = null
+    private var currentImageView: SubsamplingScaleImageView? = null
+    private var currentPageHolder: SlidePageHolder? = null
 
     companion object {
 
@@ -595,7 +596,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                 // 无动画引擎：使用当前动画路径创建临时动画引擎并播放
                 currentImageView ?: return@setOnClickListener
 
-                val tempEngine = eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationEngine(
+                val tempEngine = SlideAnimationEngine(
                     imageView = currentImageView,
                     animationPath = path,
                 ).apply {
@@ -649,7 +650,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             state = state,
         )
 
-        // 添加到关键帧列表，并按时间排序
+        // 添加到页面动画路径，并按时间排序
         val newKeyFrames = path.keyFrames.toMutableList()
         newKeyFrames.add(newKeyFrame)
         newKeyFrames.sortBy { it.timeMs }
@@ -657,16 +658,22 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         // 更新当前动画路径
         currentAnimationPath = path.copy(keyFrames = newKeyFrames)
 
+        // 更新页面的 animationPath 引用（这样页面切换时数据会保留）
+        currentAnimationPath?.apply {
+            currentPageHolder?.animationPath = this
+            currentPageHolder?.animationEngine?.animationPath = this
+        }
+
         // 刷新时间轴显示
         binding.keyFrameTimelineBody.invalidate()
 
-        toast("已添加关键帧: ${currentTime / 1000f}s")
+        toast("已合并关键帧: ${currentTime / 1000f}s")
     }
 
     /**
      * 从 SubsamplingScaleImageView 获取当前的 ImageViewState
      */
-    private fun getImageViewState(imageView: com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView): eu.kanade.tachiyomi.ui.reader.slide.engine.ImageViewState {
+    private fun getImageViewState(imageView: SubsamplingScaleImageView): eu.kanade.tachiyomi.ui.reader.slide.engine.ImageViewState {
         val viewCenterX = imageView.sWidth / 2f
         val viewCenterY = imageView.sHeight / 2f
 
@@ -1551,13 +1558,10 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                     currentAnimationEngine = engine
 
                     // 统一使用 SlideAnimationPath
-                    // 有动画时使用 engine.animationPath，无动画时创建虚拟路径
+                    // 有动画时使用 engine.animationPath，无动画时使用 currentPageHolder.animationPath
                     if (engine != null) {
-                        // 创建虚拟的动画路径（默认时长 10 秒，无关键帧）
-                        currentAnimationPath = eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationPath(
-                            durationMs = DEFAULT_DURATION,
-                            keyFrames = mutableListOf(),
-                        )
+                        // 使用页面已有的动画路径数据
+                        currentAnimationPath = currentPageHolder?.animationPath
                     } else {
                         currentAnimationPath = engine?.animationPath
                     }
@@ -1571,29 +1575,9 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
 
                         override fun onSeekTo(position: Long) {
                             // 只更新图片状态，不播放动画
-                            currentAnimationPath?.let { path ->
-                                val state = path.getStateAtTime(position)
-                                currentImageView?.apply {
-                                    // 手动应用状态：使用 applyState 的公式
-                                    val viewCenterX = sWidth / 2f
-                                    val viewCenterY = sHeight / 2f
-
-                                    val sourceCenterX = if (state.pivotX > 0.5f) {
-                                        viewCenterX - state.translationX / state.scaleX
-                                    } else {
-                                        viewCenterX - (viewCenterX - state.translationX) / state.scaleX
-                                    }
-                                    val sourceCenterY = if (state.pivotY > 0.5f) {
-                                        viewCenterY - state.translationY / state.scaleY
-                                    } else {
-                                        viewCenterY - (viewCenterY - state.translationY) / state.scaleY
-                                    }
-
-                                    val scale = state.scaleX
-                                    setScaleAndCenter(scale, PointF(sourceCenterX, sourceCenterY))
-                                    rotation = state.rotation
-                                    alpha = state.alpha
-                                }
+                            currentAnimationEngine?.apply {
+                                val stateAtTime = animationPath.getStateAtTime(position)
+                                applyState(stateAtTime)
                             }
                         }
 

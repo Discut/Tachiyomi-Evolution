@@ -15,7 +15,7 @@ import timber.log.Timber
  */
 class SlideAnimationEngine(
     private val imageView: SubsamplingScaleImageView?,
-    val animationPath: SlideAnimationPath,
+    var animationPath: SlideAnimationPath,
 ) {
     private var choreographer: Choreographer? = null
     private var frameCallback: Choreographer.FrameCallback? = null
