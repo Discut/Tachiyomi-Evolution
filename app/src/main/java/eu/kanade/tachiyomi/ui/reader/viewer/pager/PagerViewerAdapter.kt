@@ -7,6 +7,9 @@ import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
+import eu.kanade.tachiyomi.ui.reader.slide.engine.OnHolderEvent
+import eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationDemo
+import eu.kanade.tachiyomi.ui.reader.slide.engine.SlidePageHolder
 import eu.kanade.tachiyomi.ui.reader.viewer.hasMissingChapters
 import eu.kanade.tachiyomi.util.system.launchUI
 import eu.kanade.tachiyomi.widget.ViewPagerAdapter
@@ -17,7 +20,7 @@ import kotlin.math.max
 /**
  * Pager adapter used by this [viewer] to where [ViewerChapters] updates are posted.
  */
-class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
+class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter(), OnHolderEvent {
 
     /**
      * Paired list of currently set items.
@@ -123,6 +126,10 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
         return joinedItems.size
     }
 
+    override fun onLoaded(holder: PagerPageHolder) {
+        viewer.onLoaded(holder)
+    }
+
     /**
      * Creates a new view for the item at the given [position].
      */
@@ -130,7 +137,20 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
         val item = joinedItems[position].first
         val item2 = joinedItems[position].second
         return when (item) {
-            is ReaderPage -> PagerPageHolder(viewer, item, item2 as? ReaderPage)
+            is ReaderPage -> {
+                // 使用SlidePageHolder替代PagerPageHolder以支持幻灯片动画
+                val holder = SlidePageHolder(viewer, item, item2 as? ReaderPage)
+
+                // 如果启用了全局幻灯片动画，自动配置动画
+                if (SlideAnimationDemo.isGlobalEnabled) {
+                    // 为holder设置动画
+                    SlideAnimationDemo.setup(holder, item, position)
+                }
+
+                holder.onHolderEvent = this
+
+                holder
+            }
             is ChapterTransition -> PagerTransitionHolder(viewer, item)
             else -> throw NotImplementedError("Holder for ${item.javaClass} not implemented")
         }

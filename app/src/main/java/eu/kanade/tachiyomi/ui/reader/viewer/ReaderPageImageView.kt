@@ -48,7 +48,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
     private val isWebtoon: Boolean = false,
 ) : FrameLayout(context, attrs, defStyleAttrs, defStyleRes) {
 
-    protected var pageView: View? = null
+    protected open var pageView: View? = null
 
     private var config: Config? = null
 
@@ -56,6 +56,8 @@ open class ReaderPageImageView @JvmOverloads constructor(
     var onImageLoadError: (() -> Unit)? = null
     var onScaleChanged: ((newScale: Float) -> Unit)? = null
     var onViewClicked: (() -> Unit)? = null
+
+    open fun onImage() { }
 
     open fun onNeedsLandscapeZoom() { }
 
@@ -88,6 +90,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
             prepareNonAnimatedImageView()
             setNonAnimatedImage(drawable, config)
         }
+        onImage()
     }
 
     fun setImage(inputStream: InputStream, isAnimated: Boolean, config: Config) {
@@ -98,6 +101,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
             prepareNonAnimatedImageView()
             setNonAnimatedImage(inputStream, config)
         }
+        onImage()
     }
 
     fun recycle() = pageView?.let {

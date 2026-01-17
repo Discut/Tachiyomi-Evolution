@@ -5,6 +5,7 @@ import android.view.MotionEvent
 import android.view.View
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
+import eu.kanade.tachiyomi.ui.reader.slide.engine.SlidePageHolder
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -57,4 +58,11 @@ interface BaseViewer {
     fun currentPage(): ReaderPage?
 
     fun currentPageAsFlow(): Flow<ReaderPage?>
+
+    fun setOnPageChangedListener(listener: OnPageChangedListener) {
+    }
+
+    interface OnPageChangedListener {
+        fun onPageChanged(curPage: SlidePageHolder?)
+    }
 }

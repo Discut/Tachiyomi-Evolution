@@ -1,0 +1,717 @@
+package eu.kanade.tachiyomi.ui.reader.viewer
+
+import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Shader
+import android.util.AttributeSet
+import android.util.TypedValue
+import android.view.GestureDetector
+import android.view.MotionEvent
+import android.view.View
+import androidx.core.content.res.use
+import androidx.core.view.ViewCompat
+import eu.kanade.tachiyomi.R
+import kotlin.math.abs
+import kotlin.math.min
+import kotlin.math.pow
+import kotlin.math.sqrt
+
+class KeyFrameTimelineView @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null,
+) : View(context, attrs) {
+
+    // ==================== 属性声明 ====================
+
+    // 数据接口
+    var adapter: TimelineAdapter? = null
+        set(value) {
+            val wasNull = field == null
+            field = value
+
+            // adapter 改变时触发刷新
+            invalidate()
+
+            // 如果是从 null 变为非 null（首次设置），滚动到当前时间
+            if (wasNull && value != null) {
+                seekToTime(value.getCurrentPosition())
+            }
+        }
+
+    // 颜色定义（适配主题）
+    private var trackColor: Int
+    private var trackFillColor: Int
+    private var cursorColor: Int
+    private var keyFrameColor: Int
+    private var keyFrameSelectedColor: Int
+    private var textColor: Int
+    private var timeTextColor: Int
+    private var backgroundColor: Int = 0
+
+    // 布局参数
+    private val dp2: Float
+    private val dp3: Float
+    private val dp4: Float
+    private val dp6: Float
+    private val dp8: Float
+    private val dp10: Float
+    private val dp12: Float
+    private val dp16: Float
+    private val dp20: Float
+    private val dp24: Float
+    private val dp32: Float
+    private val dp48: Float
+    private val dp72: Float
+    private val sp12: Float
+    private val sp14: Float
+
+    // 关键帧选中状态
+    private var selectedKeyFrame: Long? = null
+
+    // 滚动状态 - 改为基于光标位置而非滚动偏移
+    private var cursorX: Float = 0f // 光标在轨道上的相对位置 (0 ~ trackWidth)
+    private val minCursorX: Float get() = 0f
+    private val maxCursorX: Float get() = trackWidth
+
+    // 轨道宽度（绘制轨道的实际宽度）
+    private var trackWidth: Float = 0f
+
+    // 记录上一次的内容宽度，用于尺寸变化时保持相对进度
+    private var prevTrackWidth: Float = 0f
+
+    // 用户交互锁定标志
+    private var isUserInteracting = false
+    private var lastInteractionTime = 0L
+    private val INTERACTION_COOLDOWN_MS = 500L
+    private var resetInteractionRunnable: Runnable? = null
+
+    // 光标拖动状态
+    private var isDraggingCursor = false
+    private var cursorTouchRadius = 0f
+
+    // ==================== Paint 对象 ====================
+
+    private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 4f
+        strokeCap = Paint.Cap.ROUND
+    }
+    private val trackFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+    private val keyFramePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+    private val keyFrameStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 2f
+    }
+    private val keyFrameGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+    private val cursorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+    private val cursorGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
+        style = Paint.Style.FILL
+    }
+
+    // ==================== 初始化 ====================
+
+    init {
+        // 解析 XML 属性
+        context.obtainStyledAttributes(attrs, intArrayOf(android.R.attr.background)).use { a ->
+            // 检查是否在 XML 中设置了背景
+            if (a.hasValue(0)) {
+                // 使用 XML 中设置的背景
+                val backgroundDrawable = a.getDrawable(0)
+                background = backgroundDrawable
+                // 从背景drawable推断背景颜色（如果可能）
+                backgroundColor = if (backgroundDrawable != null) {
+                    extractColorFromDrawable(backgroundDrawable)
+                } else {
+                    getDefaultBackgroundColor()
+                }
+            } else {
+                // 未设置背景，保持透明（不设置 backgroundColor）
+                backgroundColor = 0
+            }
+        }
+
+        // 解析主题颜色
+        val typedValue = TypedValue()
+        val theme = context.theme
+
+        // 获取轨道颜色
+        trackColor = if (isColorDark(backgroundColor)) {
+            Color.parseColor("#424242")
+        } else {
+            Color.parseColor("#E0E0E0")
+        }
+
+        trackFillColor = if (theme.resolveAttribute(R.attr.colorPrimary, typedValue, true)) {
+            typedValue.data
+        } else {
+            Color.parseColor("#2979FF")
+        }
+
+        cursorColor = if (theme.resolveAttribute(R.attr.colorSecondary, typedValue, true)) {
+            typedValue.data
+        } else {
+            Color.parseColor("#FF4081")
+        }
+
+        keyFrameColor = if (theme.resolveAttribute(R.attr.colorOnPrimary, typedValue, true)) {
+            typedValue.data
+        } else {
+            Color.WHITE
+        }
+
+        keyFrameSelectedColor = trackFillColor
+
+        textColor = if (theme.resolveAttribute(R.attr.colorOnBackground, typedValue, true)) {
+            typedValue.data
+        } else {
+            Color.WHITE
+        }
+
+        timeTextColor = textColor
+
+        // 转换 dp/sp 到 px
+        dp2 = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 2f, resources.displayMetrics)
+        dp3 = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 3f, resources.displayMetrics)
+        dp4 = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 4f, resources.displayMetrics)
+        dp6 = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 6f, resources.displayMetrics)
+        dp8 = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 8f, resources.displayMetrics)
+        dp10 = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 10f, resources.displayMetrics)
+        dp12 = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 12f, resources.displayMetrics)
+        dp16 = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 16f, resources.displayMetrics)
+        dp20 = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 20f, resources.displayMetrics)
+        dp24 = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 24f, resources.displayMetrics)
+        dp32 = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 32f, resources.displayMetrics)
+        dp48 = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 48f, resources.displayMetrics)
+        dp72 = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 72f, resources.displayMetrics)
+        sp12 = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 12f, resources.displayMetrics)
+        sp14 = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 14f, resources.displayMetrics)
+
+        // 光标触摸半径
+        cursorTouchRadius = dp32
+
+        // 初始化 Paint 颜色
+        trackPaint.color = trackColor
+        keyFramePaint.color = keyFrameColor
+        keyFrameStrokePaint.color = trackFillColor
+        cursorPaint.color = cursorColor
+        cursorGlowPaint.color = cursorColor
+        textPaint.color = textColor
+        textPaint.textSize = sp12
+    }
+
+    // ==================== 手势处理 ====================
+
+    private val gestureDetector = GestureDetector(
+        context,
+        object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent): Boolean {
+                // 转换坐标到 padding 内部
+                val drawHeight = height - paddingTop - paddingBottom
+                val centerY = drawHeight / 2f + paddingTop
+
+                // 检查是否点击了光标区域
+                val currentCursorScreenX = paddingLeft + trackPadding + cursorX
+                val distanceToCursor = sqrt(
+                    (e.x - currentCursorScreenX).pow(2) + (e.y - centerY).pow(2),
+                )
+
+                if (distanceToCursor <= cursorTouchRadius) {
+                    isDraggingCursor = true
+                    isUserInteracting = true
+                    lastInteractionTime = System.currentTimeMillis()
+                    return true
+                }
+
+                return true
+            }
+
+            override fun onScroll(
+                e1: MotionEvent?,
+                e2: MotionEvent,
+                distanceX: Float,
+                distanceY: Float,
+            ): Boolean {
+                // 判断是否为水平滑动手势（水平移动距离明显大于垂直距离）
+                val isHorizontalScroll = abs(distanceX) > abs(distanceY) * 1.5f && abs(distanceX) > 8f
+
+                if (isDraggingCursor || (isHorizontalScroll && e1 != null)) {
+                    // 如果不在拖动状态但检测到水平滑动，先跳转光标到起点位置
+                    if (!isDraggingCursor && e1 != null) {
+                        val xInPadding = e1.x - paddingLeft
+                        val newCursorX = (xInPadding - trackPadding).coerceIn(0f, trackWidth)
+                        cursorX = newCursorX
+                        isDraggingCursor = true
+                        isUserInteracting = true
+                    }
+
+                    // 拖拽光标：distanceX 的方向与手势方向相反，需要取反
+                    cursorX -= distanceX
+
+                    // 检测光标是否到达最右侧（需要扩展时间轴）
+                    val wasAtEdge = cursorX >= maxCursorX
+                    clampCursor()
+
+                    // 如果光标被限制在边缘，尝试扩展时间轴
+                    if (wasAtEdge && cursorX >= maxCursorX && distanceX > 0) {
+                        val adapter = adapter ?: return false
+                        val currentDuration = adapter.getDuration()
+                        val newDuration = adapter.onTimelineExtensionRequest(currentDuration)
+                        if (newDuration > currentDuration) {
+                            // 时间轴已扩展，重新计算 trackWidth
+                            val availableWidth = width - paddingLeft - paddingRight
+                            trackWidth = availableWidth - trackPadding * 2
+                            prevTrackWidth = trackWidth
+                            // 再次尝试移动光标
+                            cursorX -= distanceX
+                            clampCursor()
+                            ViewCompat.postInvalidateOnAnimation(this@KeyFrameTimelineView)
+                        }
+                    }
+
+                    updateCurrentTimeFromCursor()
+                    ViewCompat.postInvalidateOnAnimation(this@KeyFrameTimelineView)
+                    return true
+                }
+                return false
+            }
+
+            override fun onSingleTapUp(e: MotionEvent): Boolean {
+                if (!isDraggingCursor) {
+                    // 转换坐标到 padding 内部
+                    val drawHeight = height - paddingTop - paddingBottom
+                    val centerY = drawHeight / 2f + paddingTop
+                    if (abs(e.y - centerY) < dp24) {
+                        handleTrackTap(e.x)
+                    }
+                }
+                resetInteractionLock()
+                return super.onSingleTapUp(e)
+            }
+        },
+    )
+
+    // ==================== View 生命周期 ====================
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        // 获取 padding
+        val paddingX = paddingLeft + paddingRight
+        val paddingY = paddingTop + paddingBottom
+
+        // 期望的最小尺寸（考虑 padding）
+        val desiredWidth = dp48 + paddingX
+        val desiredHeight = dp72 + paddingY
+
+        // 计算宽度
+        val width = when (MeasureSpec.getMode(widthMeasureSpec)) {
+            MeasureSpec.EXACTLY -> MeasureSpec.getSize(widthMeasureSpec)
+            MeasureSpec.AT_MOST -> min(desiredWidth.toInt(), MeasureSpec.getSize(widthMeasureSpec))
+            MeasureSpec.UNSPECIFIED -> desiredWidth.toInt()
+            else -> desiredWidth.toInt()
+        }
+
+        // 计算高度
+        val height = when (MeasureSpec.getMode(heightMeasureSpec)) {
+            MeasureSpec.EXACTLY -> MeasureSpec.getSize(heightMeasureSpec)
+            MeasureSpec.AT_MOST -> min(desiredHeight.toInt(), MeasureSpec.getSize(heightMeasureSpec))
+            MeasureSpec.UNSPECIFIED -> desiredHeight.toInt()
+            else -> desiredHeight.toInt()
+        }
+
+        setMeasuredDimension(width, height)
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+
+        // 计算当前进度比例
+        val currentProgress = if (prevTrackWidth > 0) {
+            cursorX / prevTrackWidth
+        } else {
+            0.5f // 默认在中间
+        }
+
+        // 计算可用宽度（减去 padding 和轨道左右间距）
+        val availableWidth = width - paddingLeft - paddingRight
+        trackPadding = dp24
+        trackWidth = availableWidth - trackPadding * 2
+
+        // 保持相对进度
+        if (prevTrackWidth > 0) {
+            cursorX = currentProgress * trackWidth
+        } else {
+            cursorX = trackWidth * 0.5f
+        }
+
+        prevTrackWidth = trackWidth
+        clampCursor()
+        invalidate()
+    }
+
+    // ==================== 绘制相关 ====================
+
+    private var trackPadding = 0f
+
+    override fun onDraw(canvas: Canvas) {
+        // 应用 padding
+        canvas.save()
+        canvas.translate(paddingLeft.toFloat(), paddingTop.toFloat())
+
+        val drawWidth = width - paddingLeft - paddingRight
+        val drawHeight = height - paddingTop - paddingBottom
+
+        // 背景已由 View 系统处理，这里不再绘制
+        // 如果 backgroundColor 为 0，表示未设置背景，保持透明
+        if (background == null && backgroundColor != 0) {
+            val bgRect = RectF(0f, 0f, drawWidth.toFloat(), drawHeight.toFloat())
+            trackFillPaint.color = backgroundColor
+            trackFillPaint.style = Paint.Style.FILL
+            trackFillPaint.alpha = 255
+            canvas.drawRoundRect(bgRect, dp8, dp8, trackFillPaint)
+        }
+
+        val adapter = adapter ?: return
+
+        val centerX = trackPadding + cursorX // 光标在轨道上的相对位置
+        val centerY = drawHeight / 2f
+        val trackHeight = dp6
+        val trackTop = centerY - trackHeight / 2
+        val trackBottom = centerY + trackHeight / 2
+
+        val durationMs = adapter.getDuration().toFloat()
+        if (durationMs <= 0) return
+
+        // 当前时间对应的进度 (0.0 ~ 1.0)
+        val currentProgress = cursorX / trackWidth
+
+        // ==================== 1. 绘制背景轨道 ====================
+        trackFillPaint.color = trackColor
+        val bgTrackRect = RectF(
+            trackPadding,
+            trackTop,
+            trackPadding + trackWidth,
+            trackBottom,
+        )
+        canvas.drawRoundRect(bgTrackRect, trackHeight / 2, trackHeight / 2, trackFillPaint)
+
+        // ==================== 2. 绘制已播放的轨道（带渐变） ====================
+        val playedWidth = cursorX
+        val playedRect = RectF(
+            trackPadding,
+            trackTop,
+            trackPadding + playedWidth,
+            trackBottom,
+        )
+
+        if (drawWidth > 0 && drawHeight > 0) {
+            val gradient = LinearGradient(
+                playedRect.left,
+                trackTop,
+                playedRect.right,
+                trackBottom,
+                intArrayOf(
+                    trackFillColor,
+                    adjustAlpha(trackFillColor, 0.7f),
+                ),
+                null,
+                Shader.TileMode.CLAMP,
+            )
+            trackFillPaint.shader = gradient
+        }
+        trackFillPaint.color = trackFillColor
+        canvas.drawRoundRect(playedRect, trackHeight / 2, trackHeight / 2, trackFillPaint)
+        trackFillPaint.shader = null
+
+        // ==================== 3. 绘制轨道分隔线 ====================
+        trackPaint.strokeWidth = 1f
+        trackPaint.color = if (isColorDark(trackFillColor)) Color.WHITE else Color.BLACK
+        trackPaint.alpha = 50
+        val timeMarkers = listOf(0.25f, 0.5f, 0.75f)
+        timeMarkers.forEach { ratio ->
+            val markerX = trackPadding + ratio * trackWidth
+            if (markerX in trackPadding..trackPadding + trackWidth) {
+                canvas.drawLine(
+                    markerX,
+                    trackTop - dp6,
+                    markerX,
+                    trackBottom + dp6,
+                    trackPaint,
+                )
+                val timeText = formatTime((ratio * durationMs).toLong())
+                canvas.drawText(timeText, markerX, trackBottom + dp20, textPaint)
+            }
+        }
+        trackPaint.alpha = 255
+        trackPaint.strokeWidth = 4f
+
+        // ==================== 4. 绘制关键帧 ====================
+        val keyFrames = adapter.getKeyFrames()
+        keyFrames.forEach { timeMs ->
+            val ratio = timeMs / durationMs
+            val drawX = trackPadding + ratio * trackWidth
+
+            if (drawX in -dp32..drawWidth + dp32) {
+                val isSelected = selectedKeyFrame == timeMs
+                val keyFrameRadius = if (isSelected) dp10 else dp6
+
+                keyFrameGlowPaint.color = cursorColor
+                keyFrameGlowPaint.alpha = 40
+                canvas.drawCircle(drawX, centerY, keyFrameRadius + dp3, keyFrameGlowPaint)
+                keyFrameGlowPaint.alpha = 255
+
+                keyFramePaint.color = if (isSelected) keyFrameSelectedColor else trackFillColor
+                canvas.drawCircle(drawX, centerY, keyFrameRadius, keyFramePaint)
+
+                keyFrameStrokePaint.color = if (isSelected) Color.WHITE else trackFillColor
+                canvas.drawCircle(drawX, centerY, keyFrameRadius, keyFrameStrokePaint)
+
+                if (isSelected) {
+                    textPaint.textSize = sp12
+                    textPaint.color = Color.WHITE
+                    canvas.drawText("${(timeMs / 1000f).format(1)}s", drawX, centerY - dp16, textPaint)
+                }
+            }
+        }
+
+        // ==================== 5. 绘制现代风格光标 ====================
+
+        // 光标阴影/发光效果
+        cursorGlowPaint.color = cursorColor
+        cursorGlowPaint.alpha = 20
+        canvas.drawCircle(centerX, centerY, dp8, cursorGlowPaint)
+
+        // 垂直指示线（上半部分）
+        cursorPaint.color = cursorColor
+        cursorPaint.style = Paint.Style.STROKE
+        cursorPaint.strokeWidth = dp2
+        cursorPaint.alpha = 180
+        canvas.drawLine(centerX, trackTop - dp12, centerX, centerY - dp4, cursorPaint)
+
+        // 垂直指示线（下半部分）
+        cursorPaint.strokeWidth = dp2
+        canvas.drawLine(centerX, centerY + dp4, centerX, trackBottom + dp12, cursorPaint)
+        cursorPaint.alpha = 255
+
+        // 中心圆点
+        val cursorRadius = dp6
+        cursorPaint.style = Paint.Style.FILL
+        cursorPaint.color = cursorColor
+        canvas.drawCircle(centerX, centerY, cursorRadius, cursorPaint)
+
+        // 内部白色高光
+        cursorPaint.color = Color.WHITE
+        canvas.drawCircle(centerX, centerY, dp2, cursorPaint)
+
+        // 外圈光晕
+        cursorGlowPaint.color = cursorColor
+        cursorGlowPaint.alpha = 40
+        canvas.drawCircle(centerX, centerY, cursorRadius + dp3, cursorGlowPaint)
+        cursorGlowPaint.alpha = 255
+
+        // 上方时间文本背景
+        val currentTimeText = formatTime((currentProgress * durationMs).toLong())
+        textPaint.textSize = sp12
+        val textWidth = textPaint.measureText(currentTimeText)
+        val textBgPadding = dp6
+        val textBgWidth = textWidth + textBgPadding * 2
+        val textBgHeight = dp24
+        val textBgTop = trackTop - dp32
+        val textBgRect = RectF(
+            centerX - textBgWidth / 2,
+            textBgTop,
+            centerX + textBgWidth / 2,
+            textBgTop + textBgHeight,
+        )
+
+        // 时间文本背景圆角矩形
+        trackFillPaint.color = cursorColor
+        trackFillPaint.style = Paint.Style.FILL
+        trackFillPaint.alpha = 220
+        canvas.drawRoundRect(textBgRect, dp6, dp6, trackFillPaint)
+        trackFillPaint.alpha = 255
+
+        // 时间文本
+        textPaint.color = Color.WHITE
+        canvas.drawText(
+            currentTimeText,
+            centerX,
+            textBgTop + dp16,
+            textPaint,
+        )
+
+        // 底部小三角形指示器
+        val trianglePath = android.graphics.Path()
+        val triangleSize = dp6
+        trianglePath.moveTo(centerX - triangleSize / 2, textBgRect.bottom)
+        trianglePath.lineTo(centerX + triangleSize / 2, textBgRect.bottom)
+        trianglePath.lineTo(centerX, textBgRect.bottom + triangleSize)
+        trianglePath.close()
+
+        cursorPaint.color = cursorColor
+        cursorPaint.style = Paint.Style.FILL
+        canvas.drawPath(trianglePath, cursorPaint)
+
+        canvas.restore()
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        when (event.action) {
+            MotionEvent.ACTION_UP,
+            MotionEvent.ACTION_CANCEL,
+            -> {
+                if (isDraggingCursor) {
+                    isDraggingCursor = false
+                }
+                // 取消之前的 runnable
+                resetInteractionRunnable?.let { removeCallbacks(it) }
+                resetInteractionRunnable = Runnable { resetInteractionLock() }
+                postDelayed(resetInteractionRunnable, INTERACTION_COOLDOWN_MS)
+            }
+        }
+        return gestureDetector.onTouchEvent(event)
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        // 取消所有待执行的 runnable，防止内存泄漏
+        resetInteractionRunnable?.let { removeCallbacks(it) }
+        resetInteractionRunnable = null
+    }
+
+    // ==================== 私有方法 ====================
+
+    private fun clampCursor() {
+        cursorX = cursorX.coerceIn(minCursorX, maxCursorX)
+    }
+
+    private fun updateCurrentTimeFromCursor() {
+        val adapter = adapter ?: return
+        val durationMs = adapter.getDuration().toFloat()
+        if (durationMs <= 0) return
+
+        val progress = cursorX / trackWidth
+        val currentTime = (progress * durationMs).toLong().coerceIn(0, adapter.getDuration().toLong())
+
+        val keyFrames = adapter.getKeyFrames()
+        selectedKeyFrame = keyFrames.minByOrNull { abs(it - currentTime) }?.takeIf {
+            abs(it - currentTime) < 100
+        }
+
+        adapter.onSeekTo(currentTime)
+    }
+
+    private fun handleTrackTap(x: Float) {
+        // 转换触摸坐标到 padding 内部坐标
+        val xInPadding = x - paddingLeft
+        // 计算相对于轨道的位置（减去轨道左右间距）
+        val newCursorX = (xInPadding - trackPadding).coerceIn(0f, trackWidth)
+        cursorX = newCursorX
+        clampCursor()
+        updateCurrentTimeFromCursor()
+        invalidate()
+    }
+
+    private fun resetInteractionLock() {
+        isUserInteracting = false
+    }
+
+    // ==================== 公共方法 ====================
+
+    /**
+     * 获取当前光标对应的时间值
+     */
+    fun getCurrentTime(): Long {
+        val adapter = adapter ?: return 0L
+        val durationMs = adapter.getDuration().toFloat()
+        if (durationMs <= 0) return 0L
+
+        val progress = cursorX / trackWidth
+        return (progress * durationMs).toLong().coerceIn(0, adapter.getDuration().toLong())
+    }
+
+    fun seekToTime(timeMs: Long) {
+        if (isUserInteracting) {
+            return
+        }
+
+        val adapter = adapter ?: return
+        val durationMs = adapter.getDuration().toFloat()
+        if (durationMs <= 0) return
+
+        val progress = (timeMs / durationMs).coerceIn(0f, 1f)
+        cursorX = progress * trackWidth.coerceAtLeast(0f)
+        clampCursor()
+        invalidate()
+    }
+
+    // ==================== 辅助方法 ====================
+
+    private fun formatTime(ms: Long): String {
+        return "${(ms / 1000f).format(1)}s"
+    }
+
+    private fun Float.format(digits: Int): String {
+        return "%.${digits}f".format(this)
+    }
+
+    private fun isColorDark(color: Int): Boolean {
+        val darkness = 1 - (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255
+        return darkness >= 0.5
+    }
+
+    private fun adjustAlpha(color: Int, factor: Float): Int {
+        val alpha = (Color.alpha(color) * factor).toInt().coerceIn(0, 255)
+        return Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
+    }
+
+    private fun getDefaultBackgroundColor(): Int {
+        val typedValue = TypedValue()
+        return if (context.theme.resolveAttribute(android.R.attr.windowBackground, typedValue, true)) {
+            typedValue.data
+        } else {
+            Color.parseColor("#1B1B1F")
+        }
+    }
+
+    private fun extractColorFromDrawable(drawable: android.graphics.drawable.Drawable): Int {
+        // 尝试从 ColorDrawable 提取颜色
+        if (drawable is android.graphics.drawable.ColorDrawable) {
+            return drawable.color
+        }
+        // 尝试从 RippleDrawable 或其他类型的 drawable 获取颜色
+        return getDefaultBackgroundColor()
+    }
+
+    // ==================== 接口定义 ====================
+
+    interface TimelineAdapter {
+        fun getDuration(): Long
+        fun getCurrentPosition(): Long
+        fun getKeyFrames(): List<Long>
+        fun onSeekTo(position: Long)
+
+        /**
+         * 当光标拖动到时间轴最右侧时调用，用于扩展时间轴长度
+         * @param currentDuration 当前时长
+         * @return 扩展后的新时长，如果不扩展则返回 currentDuration
+         */
+        fun onTimelineExtensionRequest(currentDuration: Long): Long {
+            return currentDuration
+        }
+    }
+}

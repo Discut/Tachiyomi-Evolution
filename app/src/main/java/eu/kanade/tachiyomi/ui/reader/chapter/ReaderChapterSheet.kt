@@ -91,6 +91,7 @@ class ReaderChapterSheet @JvmOverloads constructor(context: Context, attrs: Attr
             val canShowNav = viewModel.getCurrentChapter()?.pages?.size ?: 1 > 1
             if (canShowNav) {
                 activity.binding.readerNav.root.isVisible = sheetBehavior.isCollapsed()
+                activity.binding.keyFrameTimeline.isVisible = sheetBehavior.isCollapsed()
             }
         }
 
@@ -101,6 +102,7 @@ class ReaderChapterSheet @JvmOverloads constructor(context: Context, attrs: Attr
                     binding.pill.alpha = (1 - max(0f, progress)) * 0.25f
                     val trueProgress = max(progress, 0f)
                     activity.binding.readerNav.root.alpha = (1 - abs(progress)).coerceIn(0f, 1f)
+                    activity.binding.keyFrameTimeline.alpha = (1 - abs(progress)).coerceIn(0f, 1f)
                     backgroundTintList =
                         ColorStateList.valueOf(lerpColor(primary, fullPrimary, trueProgress))
                     binding.chapterRecycler.alpha = trueProgress
@@ -131,19 +133,24 @@ class ReaderChapterSheet @JvmOverloads constructor(context: Context, attrs: Attr
                         )
                         if (canShowNav) {
                             activity.binding.readerNav.root.isVisible = true
+                            activity.binding.keyFrameTimeline.isVisible = true
                         }
                         activity.binding.readerNav.root.alpha = 1f
+                        activity.binding.keyFrameTimeline.alpha = 1f
                     }
                     if (state == BottomSheetBehavior.STATE_DRAGGING || state == BottomSheetBehavior.STATE_SETTLING) {
                         if (canShowNav) {
                             activity.binding.readerNav.root.isVisible = true
+                            activity.binding.keyFrameTimeline.isVisible = true
                         }
                     }
                     if (state == BottomSheetBehavior.STATE_EXPANDED) {
                         if (canShowNav) {
                             activity.binding.readerNav.root.isInvisible = true
+                            activity.binding.keyFrameTimeline.isInvisible = true
                         }
                         activity.binding.readerNav.root.alpha = 0f
+                        activity.binding.keyFrameTimeline.alpha = 0f
                         binding.chapterRecycler.alpha = 1f
                         // binding.tagsContainer.tagsLinearLayout.alpha = 1f
                         if (activity.sheetManageNavColor) {
@@ -153,8 +160,10 @@ class ReaderChapterSheet @JvmOverloads constructor(context: Context, attrs: Attr
                     }
                     if (state == BottomSheetBehavior.STATE_HIDDEN) {
                         activity.binding.readerNav.root.alpha = 0f
+                        activity.binding.keyFrameTimeline.alpha = 0f
                         if (canShowNav) {
                             activity.binding.readerNav.root.isInvisible = true
+                            activity.binding.keyFrameTimeline.isInvisible = true
                         }
                         binding.root.isInvisible = true
                     } else if (binding.root.isVisible) {

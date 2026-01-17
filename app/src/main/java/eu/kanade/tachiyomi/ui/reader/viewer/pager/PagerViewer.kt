@@ -11,13 +11,17 @@ import androidx.core.view.isVisible
 import androidx.viewpager.widget.ViewPager
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.download.DownloadManager
+import eu.kanade.tachiyomi.source.model.Page.State
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.model.ChapterTransition
 import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
+import eu.kanade.tachiyomi.ui.reader.slide.engine.OnHolderEvent
+import eu.kanade.tachiyomi.ui.reader.slide.engine.SlidePageHolder
 import eu.kanade.tachiyomi.ui.reader.viewer.BaseViewer
+import eu.kanade.tachiyomi.ui.reader.viewer.BaseViewer.OnPageChangedListener
 import eu.kanade.tachiyomi.ui.reader.viewer.ViewerNavigation
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
@@ -31,7 +35,7 @@ import uy.kohesive.injekt.injectLazy
  * Implementation of a [BaseViewer] to display pages with a [ViewPager].
  */
 @Suppress("LeakingThis")
-abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer {
+abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer, OnHolderEvent {
 
     val downloadManager: DownloadManager by injectLazy()
 
@@ -91,6 +95,9 @@ abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer {
                 }
             }
         }
+
+    private var pageChangedListener: OnPageChangedListener? = null
+    private var notifyHolder: PagerPageHolder? = null
 
     var hasMoved = false
 
@@ -176,6 +183,24 @@ abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer {
      */
     override fun getView(): View {
         return pager
+    }
+
+    override fun onLoaded(holder: PagerPageHolder) {
+        synchronized(this) {
+            if (notifyHolder != null) {
+                return
+            }
+            if (holder is SlidePageHolder) {
+                if (holder.page.status == State.READY) {
+                    pageChangedListener?.onPageChanged(holder)
+                } else {
+                    holder.onImageLoaded = {
+                        pageChangedListener?.onPageChanged(holder)
+                    }
+                }
+                notifyHolder = holder
+            }
+        }
     }
 
     override fun destroy() {
@@ -273,6 +298,16 @@ abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer {
             adapter.nextTransition?.to?.let {
                 activity.requestPreloadChapter(it)
             }
+        }
+        if (holder is SlidePageHolder && notifyHolder != null && notifyHolder != holder) {
+            if (holder.page.status == State.READY) {
+                pageChangedListener?.onPageChanged(holder)
+            } else {
+                holder.onImageLoaded = {
+                    pageChangedListener?.onPageChanged(holder)
+                }
+            }
+            notifyHolder = holder
         }
     }
 
@@ -528,4 +563,8 @@ abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer {
     }
 
     override fun currentPageAsFlow(): Flow<ReaderPage?> = _currentPageFlow
+
+    override fun setOnPageChangedListener(listener: OnPageChangedListener) {
+        this.pageChangedListener = listener
+    }
 }

@@ -24,4 +24,6 @@ data class ImageViewState(
 
     // 视图的透明度，范围0.0（完全透明）到1.0（完全不透明）[1,8](@ref)
     val alpha: Float,
-)
+) {
+    object Companion
+}

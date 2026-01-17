@@ -15,6 +15,7 @@ import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
+import android.graphics.PointF
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.LayerDrawable
 import android.net.Uri
@@ -110,7 +111,10 @@ import eu.kanade.tachiyomi.ui.reader.settings.ReaderBottomButton
 import eu.kanade.tachiyomi.ui.reader.settings.ReadingModeType
 import eu.kanade.tachiyomi.ui.reader.settings.TabbedReaderSettingsSheet
 import eu.kanade.tachiyomi.ui.reader.sheet.TagSettingsSheet
+import eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationDemo
+import eu.kanade.tachiyomi.ui.reader.slide.engine.SlidePageHolder
 import eu.kanade.tachiyomi.ui.reader.viewer.BaseViewer
+import eu.kanade.tachiyomi.ui.reader.viewer.KeyFrameTimelineView
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.L2RPagerViewer
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerViewer
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.R2LPagerViewer
@@ -257,6 +261,22 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             (viewer as? PagerViewer)?.config?.hingeGapSize = value
         }
 
+    // 时间轴同步：当前动画引擎引用
+    private var currentAnimationEngine: eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationEngine? = null
+
+    // 时间轴同步：上次更新时间（用于节流）
+    private var lastTimelineUpdateTime = 0L
+    private val TIMELINE_UPDATE_INTERVAL_MS = 50L // 每50ms更新一次（20fps）
+
+    // 统一的时间轴数据管理
+    private var currentAnimationPath: eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationPath? = null
+    private val DEFAULT_DURATION = 10000L // 默认时长 10 秒
+    private val EXTENSION_STEP = 2000L // 每次扩展增加 2 秒
+
+    // 当前页面的图片视图引用（用于获取变换状态）
+    private var currentImageView: com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView? = null
+    private var currentPageHolder: eu.kanade.tachiyomi.ui.reader.slide.engine.SlidePageHolder? = null
+
     companion object {
 
         const val SHIFT_DOUBLE_PAGES = "shiftingDoublePages"
@@ -338,6 +358,11 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         binding.appBar.setBackgroundColor(contextCompatColor(R.color.surface_alpha))
         ViewCompat.setBackgroundTintList(
             binding.readerNav.root,
+            ColorStateList.valueOf(contextCompatColor(R.color.surface_alpha)),
+        )
+
+        ViewCompat.setBackgroundTintList(
+            binding.keyFrameTimeline,
             ColorStateList.valueOf(contextCompatColor(R.color.surface_alpha)),
         )
 
@@ -426,8 +451,10 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             indexChapterToShift = savedInstanceState.getLong(SHIFTED_CHAP_INDEX, Long.MIN_VALUE)
                 .takeIf { it != Long.MIN_VALUE }
             binding.readerNav.root.isInvisible = !menuVisible
+            binding.keyFrameTimeline.isInvisible = !menuVisible
         } else {
             binding.readerNav.root.isInvisible = true
+            binding.keyFrameTimeline.isInvisible = true
         }
 
         binding.chaptersSheet.chaptersBottomSheet.setup(this)
@@ -551,6 +578,117 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                 )
             }
         }
+
+        binding.playArrow.setOnClickListener {
+            val path = currentAnimationPath
+            if (path == null) {
+                toast("没有可播放的时间轴")
+                return@setOnClickListener
+            }
+
+            val engine = currentAnimationEngine
+            if (engine != null) {
+                // 有动画引擎：重置并从头播放
+                engine.reset()
+                engine.start()
+            } else {
+                // 无动画引擎：使用当前动画路径创建临时动画引擎并播放
+                currentImageView ?: return@setOnClickListener
+
+                val tempEngine = eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationEngine(
+                    imageView = currentImageView,
+                    animationPath = path,
+                ).apply {
+                    // 播放完成后，保持最终状态
+                    onAnimationComplete = {
+                        // 不需要额外操作，最后一帧状态已被应用
+                    }
+                }
+
+                tempEngine.start()
+                toast("开始播放: ${path.durationMs / 1000f}s")
+            }
+        }
+
+        binding.addTimePoint.setOnClickListener {
+            addKeyFrameAtCurrentTime()
+        }
+    }
+
+    /**
+     * 在当前时间轴光标位置添加关键帧
+     */
+    private fun addKeyFrameAtCurrentTime() {
+        val imageView = currentImageView
+        if (imageView == null || !imageView.isReady) {
+            toast("图片未准备好")
+            return
+        }
+
+        val path = currentAnimationPath ?: run {
+            toast("时间轴未初始化")
+            return
+        }
+
+        // 获取当前时间轴光标位置对应的时间
+        val currentTime = binding.keyFrameTimelineBody.getCurrentTime()
+
+        // 检查是否已有关键帧在相同时间位置
+        val existingFrameIndex = path.keyFrames.indexOfFirst { it.timeMs == currentTime }
+        if (existingFrameIndex != -1) {
+            toast("该时间位置已有关键帧，请先删除或调整光标位置")
+            return
+        }
+
+        // 从 ImageView 获取当前变换状态
+        val state = getImageViewState(imageView)
+
+        // 创建新的关键帧
+        val newKeyFrame = eu.kanade.tachiyomi.ui.reader.slide.engine.KeyFrame(
+            timeMs = currentTime,
+            state = state,
+        )
+
+        // 添加到关键帧列表，并按时间排序
+        val newKeyFrames = path.keyFrames.toMutableList()
+        newKeyFrames.add(newKeyFrame)
+        newKeyFrames.sortBy { it.timeMs }
+
+        // 更新当前动画路径
+        currentAnimationPath = path.copy(keyFrames = newKeyFrames)
+
+        // 刷新时间轴显示
+        binding.keyFrameTimelineBody.invalidate()
+
+        toast("已添加关键帧: ${currentTime / 1000f}s")
+    }
+
+    /**
+     * 从 SubsamplingScaleImageView 获取当前的 ImageViewState
+     */
+    private fun getImageViewState(imageView: com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView): eu.kanade.tachiyomi.ui.reader.slide.engine.ImageViewState {
+        val viewCenterX = imageView.sWidth / 2f
+        val viewCenterY = imageView.sHeight / 2f
+
+        val currentCenter = imageView.center
+        val sourceCenterX = currentCenter?.x ?: (imageView.sWidth / 2f)
+        val sourceCenterY = currentCenter?.y ?: (imageView.sHeight / 2f)
+
+        // 根据 applyState 的公式反向计算 translationX/Y
+        val scale = imageView.scale
+        val translationX = (viewCenterX - sourceCenterX) * scale
+        val translationY = (viewCenterY - sourceCenterY) * scale
+
+        return eu.kanade.tachiyomi.ui.reader.slide.engine.ImageViewState(
+            translationX = translationX,
+            translationY = translationY,
+            scaleX = scale,
+            scaleY = scale,
+            rotation = imageView.rotation,
+            pivotX = 0.5f,
+            pivotY = 0.5f,
+            alpha = imageView.alpha,
+        )
     }
 
     /**
@@ -567,6 +705,10 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         snackbar?.dismiss()
         snackbar = null
         autoPlayTimer?.cancelTickAndProgress()
+        // 清理动画引擎回调，避免内存泄漏
+        currentAnimationEngine?.onFrameUpdate = null
+        currentAnimationEngine = null
+        currentImageView = null
     }
 
     /**
@@ -1384,6 +1526,103 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         viewer = newViewer
         binding.viewerContainer.addView(newViewer.getView())
 
+        // ============================================
+        // 启用幻灯片动画效果
+        // ============================================
+        if (mode == ReaderMode.GALLERY) {
+            SlideAnimationDemo.enable()
+        }
+
+        viewer?.setOnPageChangedListener(
+            object : BaseViewer.OnPageChangedListener {
+                override fun onPageChanged(curPage: SlidePageHolder?) {
+                    if (curPage == null) {
+                        return
+                    }
+
+                    // 保存当前页面引用
+                    currentPageHolder = curPage
+                    currentImageView = curPage.getImageView()
+
+                    val engine = curPage.animationEngine
+
+                    // 清理之前的回调
+                    currentAnimationEngine?.onFrameUpdate = null
+                    currentAnimationEngine = engine
+
+                    // 统一使用 SlideAnimationPath
+                    // 有动画时使用 engine.animationPath，无动画时创建虚拟路径
+                    if (engine != null) {
+                        // 创建虚拟的动画路径（默认时长 10 秒，无关键帧）
+                        currentAnimationPath = eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationPath(
+                            durationMs = DEFAULT_DURATION,
+                            keyFrames = mutableListOf(),
+                        )
+                    } else {
+                        currentAnimationPath = engine?.animationPath
+                    }
+
+                    binding.keyFrameTimelineBody.adapter = object : KeyFrameTimelineView.TimelineAdapter {
+                        override fun getDuration() = currentAnimationPath?.durationMs ?: DEFAULT_DURATION
+
+                        override fun getCurrentPosition() = 0L // 统一模式下没有播放进度
+
+                        override fun getKeyFrames() = currentAnimationPath?.keyFrames?.map { it.timeMs } ?: listOf()
+
+                        override fun onSeekTo(position: Long) {
+                            // 只更新图片状态，不播放动画
+                            currentAnimationPath?.let { path ->
+                                val state = path.getStateAtTime(position)
+                                currentImageView?.apply {
+                                    // 手动应用状态：使用 applyState 的公式
+                                    val viewCenterX = sWidth / 2f
+                                    val viewCenterY = sHeight / 2f
+
+                                    val sourceCenterX = if (state.pivotX > 0.5f) {
+                                        viewCenterX - state.translationX / state.scaleX
+                                    } else {
+                                        viewCenterX - (viewCenterX - state.translationX) / state.scaleX
+                                    }
+                                    val sourceCenterY = if (state.pivotY > 0.5f) {
+                                        viewCenterY - state.translationY / state.scaleY
+                                    } else {
+                                        viewCenterY - (viewCenterY - state.translationY) / state.scaleY
+                                    }
+
+                                    val scale = state.scaleX
+                                    setScaleAndCenter(scale, PointF(sourceCenterX, sourceCenterY))
+                                    rotation = state.rotation
+                                    alpha = state.alpha
+                                }
+                            }
+                        }
+
+                        override fun onTimelineExtensionRequest(currentDuration: Long): Long {
+                            // 时间轴扩展，每次增加 2 秒
+                            val newDuration = currentDuration + EXTENSION_STEP
+
+                            // 更新当前动画路径的时长
+                            currentAnimationPath = currentAnimationPath?.copy(durationMs = newDuration)
+
+                            return newDuration
+                        }
+                    }
+
+                    // 有动画时，保持原有的帧更新回调
+                    engine?.onFrameUpdate = { elapsedTimeMs ->
+                        val now = System.currentTimeMillis()
+                        // 节流：每 50ms 更新一次时间轴（20fps）
+                        if (now - lastTimelineUpdateTime >= TIMELINE_UPDATE_INTERVAL_MS) {
+                            lastTimelineUpdateTime = now
+                            binding.keyFrameTimelineBody.seekToTime(elapsedTimeMs)
+                        }
+                    }
+
+                    engine?.start()
+                }
+            },
+        )
+
         if (newViewer is R2LPagerViewer) {
             binding.readerNav.leftChapter.compatToolTipText = getString(R.string.next_chapter)
             binding.readerNav.rightChapter.compatToolTipText = getString(R.string.previous_chapter)
@@ -1486,6 +1725,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             binding.chaptersSheet.root.sheetBehavior.isCollapsed() -> View.VISIBLE
             else -> View.INVISIBLE
         }
+        binding.keyFrameTimeline.visibility = binding.readerNav.root.visibility
         if (lastShiftDoubleState == null) {
             manuallyShiftedPages = false
         }
