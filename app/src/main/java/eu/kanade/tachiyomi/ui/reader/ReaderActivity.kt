@@ -278,6 +278,9 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
     private val DEFAULT_DURATION = 5000L // 默认时长 5 秒
     private val EXTENSION_STEP = 10L // 每次扩展增加 10ms
 
+    // 时间轴扩展面板状态
+    private var isTimelinePanelExpanded = false
+
     // 当前页面的图片视图引用（用于获取变换状态）
     private var currentImageView: SubsamplingScaleImageView? = null
     private var currentPageHolder: SlidePageHolder? = null
@@ -372,7 +375,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         )
 
         ViewCompat.setBackgroundTintList(
-            binding.keyFrameTimeline,
+            binding.keyFrameTimeline.root,
             ColorStateList.valueOf(contextCompatColor(R.color.surface_alpha)),
         )
 
@@ -461,10 +464,10 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             indexChapterToShift = savedInstanceState.getLong(SHIFTED_CHAP_INDEX, Long.MIN_VALUE)
                 .takeIf { it != Long.MIN_VALUE }
             binding.readerNav.root.isInvisible = !menuVisible
-            binding.keyFrameTimeline.isInvisible = !menuVisible
+            binding.keyFrameTimeline.root.isInvisible = !menuVisible
         } else {
             binding.readerNav.root.isInvisible = true
-            binding.keyFrameTimeline.isInvisible = true
+            binding.keyFrameTimeline.root.isInvisible = true
         }
 
         binding.chaptersSheet.chaptersBottomSheet.setup(this)
@@ -589,7 +592,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             }
         }
 
-        binding.playArrow.setOnClickListener {
+        binding.keyFrameTimeline.playArrow.setOnClickListener {
             val path = currentAnimationPath
             if (path == null) {
                 toast("没有可播放的时间轴")
@@ -620,9 +623,166 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             }
         }
 
-        binding.addTimePoint.setOnClickListener {
+        binding.keyFrameTimeline.addTimePoint.setOnClickListener {
             addKeyFrameAtCurrentTime()
         }
+
+        // 时间轴扩展面板展开/收起按钮
+        binding.keyFrameTimeline.timelineExpandToggle.setOnClickListener {
+            toggleTimelinePanel()
+        }
+
+        // 面板内的按钮点击事件
+        binding.keyFrameTimeline.timelineBtnDeleteAll.setOnClickListener {
+            deleteAllKeyFrames()
+        }
+
+        binding.keyFrameTimeline.timelineBtnExport.setOnClickListener {
+            exportAnimationSequence()
+        }
+
+        binding.keyFrameTimeline.timelineBtnImport.setOnClickListener {
+            importAnimationSequence()
+        }
+    }
+
+    /**
+     * 切换时间轴扩展面板的展开/收起状态
+     */
+    private fun toggleTimelinePanel() {
+        val panel = binding.keyFrameTimeline.timelineExpandPanel
+        val toggleBtn = binding.keyFrameTimeline.timelineExpandToggle
+        isTimelinePanelExpanded = !isTimelinePanelExpanded
+
+        if (isTimelinePanelExpanded) {
+            // 展开面板
+            // 先设置面板为可见但高度为 0，避免闪烁
+            panel.visibility = View.VISIBLE
+            panel.alpha = 0f
+
+            // 立即设置高度为 0，防止显示完整内容
+            val layoutParams = panel.layoutParams
+            layoutParams.height = 0
+            panel.layoutParams = layoutParams
+
+            // 在下一个布局帧测量面板的实际高度并开始动画
+            panel.post {
+                // 测量面板的实际高度
+                val widthSpec = android.view.View.MeasureSpec.makeMeasureSpec(panel.width, android.view.View.MeasureSpec.EXACTLY)
+                val heightSpec = android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED)
+                panel.measure(widthSpec, heightSpec)
+                val targetHeight = panel.measuredHeight
+
+                // 使用 ValueAnimator 动画高度从 0 到目标高度
+                val valueAnimator = android.animation.ValueAnimator.ofInt(0, targetHeight)
+                valueAnimator.duration = 300
+                valueAnimator.interpolator = android.view.animation.DecelerateInterpolator()
+                valueAnimator.addUpdateListener { animator ->
+                    val animatedValue = animator.animatedValue as Int
+                    val params = panel.layoutParams
+                    params.height = animatedValue
+                    panel.layoutParams = params
+                    // 同步淡入
+                    panel.alpha = (animatedValue.toFloat() / targetHeight).coerceIn(0f, 1f)
+                }
+                valueAnimator.start()
+            }
+
+            // 更新按钮图标为向上箭头
+            toggleBtn.setImageResource(R.drawable.ic_expand_less_24dp)
+
+            // 更新面板内容
+            updateTimelinePanelContent()
+        } else {
+            // 收起面板
+            val currentHeight = panel.height
+
+            // 使用 ValueAnimator 动画高度从当前高度到 0
+            val valueAnimator = android.animation.ValueAnimator.ofInt(currentHeight, 0)
+            valueAnimator.duration = 250
+            valueAnimator.interpolator = android.view.animation.AccelerateInterpolator()
+            valueAnimator.addUpdateListener { animator ->
+                val animatedValue = animator.animatedValue as Int
+                val params = panel.layoutParams
+                params.height = animatedValue
+                panel.layoutParams = params
+                // 同步淡出
+                panel.alpha = (animatedValue.toFloat() / currentHeight).coerceIn(0f, 1f)
+            }
+            valueAnimator.addListener(
+                object : android.animation.Animator.AnimatorListener {
+                    override fun onAnimationStart(animation: android.animation.Animator) {}
+                    override fun onAnimationEnd(animation: android.animation.Animator) {
+                        panel.visibility = View.GONE
+                        // 重置高度为 wrap_content
+                        val params = panel.layoutParams
+                        params.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                        panel.layoutParams = params
+                        panel.alpha = 1f
+                    }
+                    override fun onAnimationCancel(animation: android.animation.Animator) {}
+                    override fun onAnimationRepeat(animation: android.animation.Animator) {}
+                },
+            )
+            valueAnimator.start()
+
+            // 更新按钮图标为向下箭头
+            toggleBtn.setImageResource(R.drawable.ic_expand_more_24dp)
+        }
+    }
+
+    /**
+     * 更新时间轴扩展面板的内容
+     */
+    private fun updateTimelinePanelContent() {
+        val path = currentAnimationPath
+        val duration = path?.durationMs ?: 0L
+        val keyFrameCount = path?.keyFrames?.size ?: 0
+
+        binding.keyFrameTimeline.timelineDurationInfo.text = "总时间：${duration / 1000f}s"
+        binding.keyFrameTimeline.timelineKeyframeCount.text = "关键帧数量： $keyFrameCount"
+    }
+
+    /**
+     * 删除所有关键帧
+     */
+    private fun deleteAllKeyFrames() {
+        val path = currentAnimationPath ?: run {
+            toast("No animation sequence to delete")
+            return
+        }
+
+        currentAnimationEngine?.animationPath = path.copy(keyFrames = emptyList())
+
+        // 同步到保存管理器并标记为已修改
+        currentAnimationPath?.let {
+            animationSaveManager.setCurrentAnimation(animationSaveManager.getCurrentImageId(), it)
+        }
+        animationSaveManager.markAsDirty()
+
+        // 刷新时间轴显示
+        binding.keyFrameTimeline.keyFrameTimelineBody.invalidate()
+
+        // 更新面板内容
+        updateTimelinePanelContent()
+
+        toast("All keyframes deleted")
+    }
+
+    /**
+     * 导出动画序列
+     */
+    private fun exportAnimationSequence() {
+        // TODO: 实现导出功能
+        toast("Export feature coming soon")
+    }
+
+    /**
+     * 导入动画序列
+     */
+    private fun importAnimationSequence() {
+        // TODO: 实现导入功能
+        toast("Import feature coming soon")
     }
 
     /**
@@ -641,7 +801,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         }
 
         // 获取当前时间轴光标位置对应的时间
-        val currentTime = binding.keyFrameTimelineBody.getCurrentTime()
+        val currentTime = binding.keyFrameTimeline.keyFrameTimelineBody.getCurrentTime()
 
         // 检查是否已有关键帧在相同时间位置
         val existingFrameIndex = path.keyFrames.indexOfFirst { it.timeMs == currentTime }
@@ -673,13 +833,16 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         }
 
         // 刷新时间轴显示
-        binding.keyFrameTimelineBody.invalidate()
+        binding.keyFrameTimeline.keyFrameTimelineBody.invalidate()
 
         // 同步到保存管理器并标记为已修改
         currentAnimationPath?.let {
             animationSaveManager.setCurrentAnimation(animationSaveManager.getCurrentImageId(), it)
         }
         animationSaveManager.markAsDirty()
+
+        // 更新面板内容
+        updateTimelinePanelContent()
 
         toast("已合并关键帧: ${currentTime / 1000f}s")
     }
@@ -714,13 +877,16 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         }
 
         // 刷新时间轴显示
-        binding.keyFrameTimelineBody.invalidate()
+        binding.keyFrameTimeline.keyFrameTimelineBody.invalidate()
 
         // 同步到保存管理器并标记为已修改
         currentAnimationPath?.let {
             animationSaveManager.setCurrentAnimation(animationSaveManager.getCurrentImageId(), it)
         }
         animationSaveManager.markAsDirty()
+
+        // 更新面板内容
+        updateTimelinePanelContent()
 
         toast("已删除关键帧: ${keyFrameTime / 1000f}s")
     }
@@ -1679,7 +1845,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                         animationSaveManager.setCurrentAnimation(imageId, currentPageHolder?.animationPath)
 
                         withUIContext {
-                            binding.keyFrameTimelineBody.adapter = object : KeyFrameTimelineView.TimelineAdapter {
+                            binding.keyFrameTimeline.keyFrameTimelineBody.adapter = object : KeyFrameTimelineView.TimelineAdapter {
                                 override fun getDuration() = currentAnimationPath?.durationMs ?: DEFAULT_DURATION
 
                                 override fun getCurrentPosition() = 0L // 统一模式下没有播放进度
@@ -1709,6 +1875,9 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                                     }
                                     animationSaveManager.markAsDirty()
 
+                                    // 更新面板内容
+                                    updateTimelinePanelContent()
+
                                     return newDuration
                                 }
 
@@ -1735,6 +1904,9 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                                     }
                                     animationSaveManager.markAsDirty()
 
+                                    // 更新面板内容
+                                    updateTimelinePanelContent()
+
                                     return newDuration
                                 }
 
@@ -1749,7 +1921,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                                 // 节流：每 50ms 更新一次时间轴（20fps）
                                 if (now - lastTimelineUpdateTime >= TIMELINE_UPDATE_INTERVAL_MS) {
                                     lastTimelineUpdateTime = now
-                                    binding.keyFrameTimelineBody.seekToTime(elapsedTimeMs)
+                                    binding.keyFrameTimeline.keyFrameTimelineBody.seekToTime(elapsedTimeMs)
                                 }
                             }
 
@@ -1865,7 +2037,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             binding.chaptersSheet.root.sheetBehavior.isCollapsed() -> View.VISIBLE
             else -> View.INVISIBLE
         }
-        binding.keyFrameTimeline.visibility = binding.readerNav.root.visibility
+        binding.keyFrameTimeline.root.visibility = binding.readerNav.root.visibility
         if (lastShiftDoubleState == null) {
             manuallyShiftedPages = false
         }
