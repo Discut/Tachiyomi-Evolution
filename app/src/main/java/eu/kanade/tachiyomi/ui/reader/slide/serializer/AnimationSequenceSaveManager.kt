@@ -214,7 +214,7 @@ class AnimationSequenceSaveManager(
                 durationMs = path.durationMs,
                 data = json,
                 updatedAt = System.currentTimeMillis(),
-                version = existing.version + 1
+                version = existing.version + 1,
             )
             dao.update(updated)
         } else {
@@ -233,5 +233,7 @@ class AnimationSequenceSaveManager(
     companion object {
         /** 默认延迟保存时间：3 秒 */
         const val DEFAULT_SAVE_DELAY_MS = 3000L
+
+        const val MINI_TIME_INTERVAL = 1000L
     }
 }

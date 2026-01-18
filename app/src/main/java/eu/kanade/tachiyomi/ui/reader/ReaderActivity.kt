@@ -1718,7 +1718,15 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
 
                                     // 更新当前动画路径的时长
                                     currentAnimationPath?.apply {
-                                        currentAnimationEngine?.animationPath = copy(durationMs = if (newDuration <= 1000L) 1000L else newDuration)
+                                        currentAnimationEngine?.animationPath = copy(
+                                            durationMs = if (keyFrames.isNotEmpty() && newDuration <= keyFrames.last().timeMs) {
+                                                keyFrames.last().timeMs
+                                            } else if (newDuration <= AnimationSequenceSaveManager.MINI_TIME_INTERVAL) {
+                                                AnimationSequenceSaveManager.MINI_TIME_INTERVAL
+                                            } else {
+                                                newDuration
+                                            },
+                                        )
                                     }
 
                                     // 同步到保存管理器并标记为已修改
