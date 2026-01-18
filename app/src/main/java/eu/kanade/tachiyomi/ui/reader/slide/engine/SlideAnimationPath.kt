@@ -64,14 +64,16 @@ data class SlideAnimationPath(
         progress: Float,
     ): ImageViewState {
         return ImageViewState(
-            translationX = lerp(start.translationX, end.translationX, progress),
-            translationY = lerp(start.translationY, end.translationY, progress),
-            scaleX = lerp(start.scaleX, end.scaleX, progress),
-            scaleY = lerp(start.scaleY, end.scaleY, progress),
+            normalizedTranslationX = lerp(start.normalizedTranslationX, end.normalizedTranslationX, progress),
+            normalizedTranslationY = lerp(start.normalizedTranslationY, end.normalizedTranslationY, progress),
+            normalizedScale = lerp(start.normalizedScale, end.normalizedScale, progress),
             rotation = lerp(start.rotation, end.rotation, progress),
             pivotX = lerp(start.pivotX, end.pivotX, progress),
             pivotY = lerp(start.pivotY, end.pivotY, progress),
             alpha = lerp(start.alpha, end.alpha, progress),
+            // 保留第一个关键帧的元数据
+            imageWidth = start.imageWidth,
+            imageHeight = start.imageHeight,
         )
     }
 
@@ -97,25 +99,11 @@ data class KeyFrame(
 )
 
 /**
- * 扩展函数：创建默认视图状态
- */
-fun ImageViewState.Companion.default() = ImageViewState(
-    translationX = 0f,
-    translationY = 0f,
-    scaleX = 1f,
-    scaleY = 1f,
-    rotation = 0f,
-    pivotX = 0.5f,
-    pivotY = 0.5f,
-    alpha = 1f,
-)
-
-/**
  * 扩展函数：创建放大缩小的关键帧路径
  *
  * @param durationMs 动画总时长
- * @param fromScale 起始缩放比例
- * @param toScale 目标缩放比例
+ * @param fromScale 起始缩放比例（相对于 fitScale）
+ * @param toScale 目标缩放比例（相对于 fitScale）
  * @param centerX 缩放中心X坐标（0-1）
  * @param centerY 缩放中心Y坐标（0-1）
  */
@@ -127,10 +115,9 @@ fun createScaleAnimationPath(
     centerY: Float = 0.5f,
 ): SlideAnimationPath {
     val startState = ImageViewState(
-        translationX = 0f,
-        translationY = 0f,
-        scaleX = fromScale,
-        scaleY = fromScale,
+        normalizedTranslationX = 0f,
+        normalizedTranslationY = 0f,
+        normalizedScale = fromScale,
         rotation = 0f,
         pivotX = centerX,
         pivotY = centerY,
@@ -138,10 +125,9 @@ fun createScaleAnimationPath(
     )
 
     val endState = ImageViewState(
-        translationX = 0f,
-        translationY = 0f,
-        scaleX = toScale,
-        scaleY = toScale,
+        normalizedTranslationX = 0f,
+        normalizedTranslationY = 0f,
+        normalizedScale = toScale,
         rotation = 0f,
         pivotX = centerX,
         pivotY = centerY,
@@ -161,25 +147,24 @@ fun createScaleAnimationPath(
  * 扩展函数：创建摄像机移动的关键帧路径
  *
  * @param durationMs 动画总时长
- * @param startX 起始X偏移（像素）
- * @param startY 起始Y偏移（像素）
- * @param endX 目标X偏移（像素）
- * @param endY 目标Y偏移（像素）
- * @param scale 缩放比例
+ * @param startX 起始X偏移（相对于图片宽度，0-1）
+ * @param startY 起始Y偏移（相对于图片高度，0-1）
+ * @param endX 目标X偏移（相对于图片宽度，0-1）
+ * @param endY 目标Y偏移（相对于图片高度，0-1）
+ * @param scale 缩放比例（相对于 fitScale）
  */
 fun createPanAnimationPath(
     durationMs: Long,
     startX: Float = 0f,
     startY: Float = 0f,
-    endX: Float = 100f,
-    endY: Float = 100f,
+    endX: Float = 0.1f,
+    endY: Float = 0.1f,
     scale: Float = 1.2f,
 ): SlideAnimationPath {
     val startState = ImageViewState(
-        translationX = startX,
-        translationY = startY,
-        scaleX = scale,
-        scaleY = scale,
+        normalizedTranslationX = startX,
+        normalizedTranslationY = startY,
+        normalizedScale = scale,
         rotation = 0f,
         pivotX = 0.5f,
         pivotY = 0.5f,
@@ -187,10 +172,9 @@ fun createPanAnimationPath(
     )
 
     val endState = ImageViewState(
-        translationX = endX,
-        translationY = endY,
-        scaleX = scale,
-        scaleY = scale,
+        normalizedTranslationX = endX,
+        normalizedTranslationY = endY,
+        normalizedScale = scale,
         rotation = 0f,
         pivotX = 0.5f,
         pivotY = 0.5f,
@@ -210,27 +194,26 @@ fun createPanAnimationPath(
  * 扩展函数：创建组合动画路径（缩放+移动）
  *
  * @param durationMs 动画总时长
- * @param fromScale 起始缩放
- * @param toScale 目标缩放
- * @param startX 起始X偏移
- * @param startY 起始Y偏移
- * @param endX 目标X偏移
- * @param endY 目标Y偏移
+ * @param fromScale 起始缩放（相对于 fitScale）
+ * @param toScale 目标缩放（相对于 fitScale）
+ * @param startX 起始X偏移（相对于图片宽度，0-1）
+ * @param startY 起始Y偏移（相对于图片高度，0-1）
+ * @param endX 目标X偏移（相对于图片宽度，0-1）
+ * @param endY 目标Y偏移（相对于图片高度，0-1）
  */
 fun createCombinedAnimationPath(
     durationMs: Long,
     fromScale: Float = 1f,
     toScale: Float = 1.3f,
-    startX: Float = -50f,
-    startY: Float = -30f,
-    endX: Float = 50f,
-    endY: Float = 30f,
+    startX: Float = -0.05f,
+    startY: Float = -0.03f,
+    endX: Float = 0.05f,
+    endY: Float = 0.03f,
 ): SlideAnimationPath {
     val startState = ImageViewState(
-        translationX = startX,
-        translationY = startY,
-        scaleX = fromScale,
-        scaleY = fromScale,
+        normalizedTranslationX = startX,
+        normalizedTranslationY = startY,
+        normalizedScale = fromScale,
         rotation = 0f,
         pivotX = 0.5f,
         pivotY = 0.5f,
@@ -238,10 +221,9 @@ fun createCombinedAnimationPath(
     )
 
     val middleState = ImageViewState(
-        translationX = 0f,
-        translationY = 0f,
-        scaleX = toScale,
-        scaleY = toScale,
+        normalizedTranslationX = 0f,
+        normalizedTranslationY = 0f,
+        normalizedScale = toScale,
         rotation = 0f,
         pivotX = 0.5f,
         pivotY = 0.5f,
@@ -249,10 +231,9 @@ fun createCombinedAnimationPath(
     )
 
     val endState = ImageViewState(
-        translationX = endX,
-        translationY = endY,
-        scaleX = toScale,
-        scaleY = toScale,
+        normalizedTranslationX = endX,
+        normalizedTranslationY = endY,
+        normalizedScale = toScale,
         rotation = 0f,
         pivotX = 0.5f,
         pivotY = 0.5f,

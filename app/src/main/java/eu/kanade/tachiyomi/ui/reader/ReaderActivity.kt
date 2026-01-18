@@ -892,7 +892,11 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
     }
 
     /**
-     * 从 SubsamplingScaleImageView 获取当前的 ImageViewState
+     * 从 SubsamplingScaleImageView 获取当前的 ImageViewState（使用归一化值）
+     *
+     * 归一化说明：
+     * - normalizedScale: 相对于 fitScale 的倍数
+     * - normalizedTranslationX/Y: 相对于图片尺寸的比例
      */
     private fun getImageViewState(imageView: SubsamplingScaleImageView): eu.kanade.tachiyomi.ui.reader.slide.engine.ImageViewState {
         val viewCenterX = imageView.sWidth / 2f
@@ -902,20 +906,28 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         val sourceCenterX = currentCenter?.x ?: (imageView.sWidth / 2f)
         val sourceCenterY = currentCenter?.y ?: (imageView.sHeight / 2f)
 
-        // 根据 applyState 的公式反向计算 translationX/Y
-        val scale = imageView.scale
-        val translationX = (viewCenterX - sourceCenterX) * scale
-        val translationY = (viewCenterY - sourceCenterY) * scale
+        // 获取当前缩放和适配屏幕的缩放值
+        val currentScale = imageView.scale
+        val fitScale = imageView.minScale
+
+        // 根据 applyState 的公式反向计算 translationX/Y（绝对像素值）
+        val translationX = (viewCenterX - sourceCenterX) * currentScale
+        val translationY = (viewCenterY - sourceCenterY) * currentScale
+
+        // 获取图片原始尺寸
+        val imageWidth = imageView.sWidth
+        val imageHeight = imageView.sHeight
 
         return eu.kanade.tachiyomi.ui.reader.slide.engine.ImageViewState(
-            translationX = translationX,
-            translationY = translationY,
-            scaleX = scale,
-            scaleY = scale,
+            normalizedTranslationX = if (imageWidth > 0) translationX / imageWidth else 0f,
+            normalizedTranslationY = if (imageHeight > 0) translationY / imageHeight else 0f,
+            normalizedScale = if (fitScale > 0) currentScale / fitScale else 1f,
             rotation = imageView.rotation,
             pivotX = 0.5f,
             pivotY = 0.5f,
             alpha = imageView.alpha,
+            imageWidth = imageWidth,
+            imageHeight = imageHeight,
         )
     }
 

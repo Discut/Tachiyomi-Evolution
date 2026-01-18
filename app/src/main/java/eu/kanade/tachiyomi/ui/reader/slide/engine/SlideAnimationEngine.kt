@@ -138,6 +138,8 @@ class SlideAnimationEngine(
 
     /**
      * 将视图状态应用到图片视图
+     *
+     * 处理归一化值：将归一化的 translation 和 scale 转换为实际值
      */
     fun applyState(state: ImageViewState) {
         if (imageView == null) return
@@ -147,24 +149,37 @@ class SlideAnimationEngine(
                 return
             }
 
-            // ✅ 只保留必要的计算：视图中心
+            // 获取当前屏幕的 fitScale（适配屏幕的缩放值）
+            val fitScale = imageView.minScale
+
+            // 反归一化：计算实际的缩放值
+            val actualScale = state.normalizedScale * fitScale
+
+            // 获取图片原始尺寸
+            val imageWidth = imageView.sWidth.toFloat()
+            val imageHeight = imageView.sHeight.toFloat()
+
+            // 反归一化：计算实际的平移值（像素）
+            val actualTranslationX = state.normalizedTranslationX * imageWidth
+            val actualTranslationY = state.normalizedTranslationY * imageHeight
+
+            // 计算视图中心
             val viewCenterX = imageView.sWidth / 2f
             val viewCenterY = imageView.sHeight / 2f
 
-            // ✅ 根据公式计算源图片中心点
-            val sourceCenterX = viewCenterX - state.translationX / state.scaleX
-            val sourceCenterY = viewCenterY - state.translationY / state.scaleY
+            // 根据公式计算源图片中心点
+            val sourceCenterX = viewCenterX - actualTranslationX / actualScale
+            val sourceCenterY = viewCenterY - actualTranslationY / actualScale
 
             val sourceCenter = PointF(sourceCenterX, sourceCenterY)
 
-            // ✅ 应用缩放和中心
-            val scale = state.scaleX
-            imageView.setScaleAndCenter(scale, sourceCenter)
+            // 应用缩放和中心
+            imageView.setScaleAndCenter(actualScale, sourceCenter)
 
-            // ✅ 应用旋转
+            // 应用旋转
             imageView.rotation = state.rotation
 
-            // ✅ 应用透明度
+            // 应用透明度
             imageView.alpha = state.alpha
         } catch (e: Exception) {
             Timber.e(e, "Failed to apply image state: $state")
