@@ -113,6 +113,7 @@ import eu.kanade.tachiyomi.ui.reader.sheet.TagSettingsSheet
 import eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationEngine
 import eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationPath
 import eu.kanade.tachiyomi.ui.reader.slide.engine.SlidePageHolder
+import eu.kanade.tachiyomi.ui.reader.slide.engine.isEmpty
 import eu.kanade.tachiyomi.ui.reader.slide.serializer.AnimationSequenceSaveManager
 import eu.kanade.tachiyomi.ui.reader.viewer.BaseViewer
 import eu.kanade.tachiyomi.ui.reader.viewer.KeyFrameTimelineView
@@ -268,12 +269,14 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
 
     // 时间轴同步：上次更新时间（用于节流）
     private var lastTimelineUpdateTime = 0L
-    private val TIMELINE_UPDATE_INTERVAL_MS = 50L // 每50ms更新一次（20fps）
+    private val TIMELINE_UPDATE_INTERVAL_MS = 33 // 每33ms更新一次（30fps）
 
     // 统一的时间轴数据管理
-    private var currentAnimationPath: SlideAnimationPath? = null
-    private val DEFAULT_DURATION = 10000L // 默认时长 10 秒
-    private val EXTENSION_STEP = 2000L // 每次扩展增加 2 秒
+    private val currentAnimationPath: SlideAnimationPath?
+        get() =
+            currentAnimationEngine?.animationPath
+    private val DEFAULT_DURATION = 5000L // 默认时长 5 秒
+    private val EXTENSION_STEP = 10L // 每次扩展增加 10ms
 
     // 当前页面的图片视图引用（用于获取变换状态）
     private var currentImageView: SubsamplingScaleImageView? = null
@@ -662,12 +665,11 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         newKeyFrames.sortBy { it.timeMs }
 
         // 更新当前动画路径
-        currentAnimationPath = path.copy(keyFrames = newKeyFrames)
+        currentAnimationEngine?.animationPath = path.copy(keyFrames = newKeyFrames)
 
         // 更新页面的 animationPath 引用（这样页面切换时数据会保留）
         currentAnimationPath?.apply {
             currentPageHolder?.animationPath = this
-            currentPageHolder?.animationEngine?.animationPath = this
         }
 
         // 刷新时间轴显示
@@ -680,6 +682,47 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         animationSaveManager.markAsDirty()
 
         toast("已合并关键帧: ${currentTime / 1000f}s")
+    }
+
+    /**
+     * 删除指定时间的关键帧
+     * @param keyFrameTime 要删除的关键帧时间
+     */
+    private fun deleteKeyFrame(keyFrameTime: Long) {
+        val path = currentAnimationPath ?: run {
+            toast("时间轴未初始化")
+            return
+        }
+
+        // 检查关键帧是否存在
+        val existingFrameIndex = path.keyFrames.indexOfFirst { it.timeMs == keyFrameTime }
+        if (existingFrameIndex == -1) {
+            toast("关键帧不存在")
+            return
+        }
+
+        // 从关键帧列表中移除
+        val newKeyFrames = path.keyFrames.toMutableList()
+        newKeyFrames.removeAt(existingFrameIndex)
+
+        // 更新当前动画路径
+        currentAnimationEngine?.animationPath = path.copy(keyFrames = newKeyFrames)
+
+        // 更新页面的 animationPath 引用（这样页面切换时数据会保留）
+        currentAnimationPath?.apply {
+            currentPageHolder?.animationPath = this
+        }
+
+        // 刷新时间轴显示
+        binding.keyFrameTimelineBody.invalidate()
+
+        // 同步到保存管理器并标记为已修改
+        currentAnimationPath?.let {
+            animationSaveManager.setCurrentAnimation(animationSaveManager.getCurrentImageId(), it)
+        }
+        animationSaveManager.markAsDirty()
+
+        toast("已删除关键帧: ${keyFrameTime / 1000f}s")
     }
 
     /**
@@ -711,6 +754,18 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
     }
 
     /**
+     * 保存关键帧序列
+     */
+    private fun saveTimePoint(onEnd: suspend () -> Unit = {}) {
+        if (animationSaveManager.hasUnsavedChanges()) {
+            scope.launchIO {
+                animationSaveManager.saveImmediately()
+                onEnd()
+            }
+        }
+    }
+
+    /**
      * Called when the activity is destroyed. Cleans up the viewer, configuration and any view.
      */
     override fun onDestroy() {
@@ -718,9 +773,12 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         // 退出阅读器时保存待保存的动画序列并释放资源
         // ============================================
         if (animationSaveManager.hasUnsavedChanges()) {
-            animationSaveManager.saveImmediately()
+            saveTimePoint {
+                animationSaveManager.dispose()
+            }
+        } else {
+            animationSaveManager.dispose()
         }
-        animationSaveManager.dispose()
 
         super.onDestroy()
         viewer?.destroy()
@@ -1559,30 +1617,41 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                     if (curPage == null) {
                         return
                     }
+                    val viewerCurPage = viewer?.currentPage() ?: return
 
                     // 页面切换时保存上一页的动画（如果有未保存的修改）
-                    if (animationSaveManager.hasUnsavedChanges()) {
-                        animationSaveManager.saveImmediately()
+                    saveTimePoint()
+
+                    // 获取当前图片 ID 和对应的 holder
+                    // 如果 viewer 当前页面与 curPage 不同，且 viewer 是 PagerViewer，
+                    // 尝试从 viewer 获取对应页面的 holder（用于处理 PagerViewer 的特殊情况）
+                    val (imageId, curHolder) = when {
+                        viewerCurPage.id != curPage.page.id && viewer is PagerViewer -> {
+                            val tempHolder = (viewer as PagerViewer).getPageHolder(viewerCurPage)
+                            if (tempHolder is SlidePageHolder) {
+                                tempHolder.page.id.getImageId() to tempHolder
+                            } else {
+                                curPage.page.id.getImageId() to curPage
+                            }
+                        }
+                        else -> curPage.page.id.getImageId() to curPage
                     }
 
                     // 保存当前页面引用
-                    currentPageHolder = curPage
-                    currentImageView = curPage.getImageView()
-
-                    // 获取当前图片 ID
-                    val imageId = curPage.page.id ?: 0L
+                    currentPageHolder = curHolder
+                    currentImageView = curHolder.getImageView()
 
                     if (imageId <= 0L || currentImageView == null) {
                         return
                     }
 
-                    val engine = curPage.animationEngine ?: run {
-                        curPage.animationEngine = SlideAnimationEngine(currentImageView, SlideAnimationPath.empty()).apply {
+                    val engine = curHolder.animationEngine ?: run {
+                        curHolder.animationEngine = SlideAnimationEngine(currentImageView, SlideAnimationPath.empty()).apply {
                             onAnimationComplete = {
-                                curPage.onAnimationComplete?.invoke()
+                                curHolder.onAnimationComplete?.invoke()
                             }
                         }
-                        curPage.animationEngine
+                        curHolder.animationEngine!!
                     }
 
                     // 清理之前的回调
@@ -1593,32 +1662,21 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
 
                     loadAnimationJob = scope.launchIO {
                         // 加载该图片已保存的动画序列（如果存在）
-                        val savedPath = animationSaveManager.load(imageId)
-                        val animationPath = if (savedPath != null) {
-                            // 使用已保存的动画序列
-                            curPage.animationPath = savedPath
-                            engine?.animationPath = savedPath
-                            savedPath
-                        } else {
-                            // 没有已保存的动画，使用页面默认的
-                            if (engine != null) {
-                                currentPageHolder?.animationPath
-                            } else {
-                                engine?.animationPath
-                            }
+                        animationSaveManager.load(imageId)?.let {
+                            currentAnimationEngine?.animationPath = it
+                            Timber.e("imageId=$imageId, animationPath=$currentAnimationEngine?.animationPath, currentAnimationEngine=$currentAnimationEngine")
+                        } ?: run {
+                            Timber.e("imageId=$imageId, load is null, ")
                         }
 
-                        curPage.isAnimationEnabled = true
+                        curHolder.isAnimationEnabled = true
 
                         // 设置动画完成回调（可选）
-                        curPage.onAnimationComplete = {
+                        curHolder.onAnimationComplete = {
                             // 动画完成后的操作，例如自动翻页
                             // holder.viewer.moveToNext()
                         }
-
-                        // 更新当前动画路径并同步到保存管理器
-                        currentAnimationPath = animationPath
-                        animationSaveManager.setCurrentAnimation(imageId, animationPath)
+                        animationSaveManager.setCurrentAnimation(imageId, currentPageHolder?.animationPath)
 
                         withUIContext {
                             binding.keyFrameTimelineBody.adapter = object : KeyFrameTimelineView.TimelineAdapter {
@@ -1631,17 +1689,19 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                                 override fun onSeekTo(position: Long) {
                                     // 只更新图片状态，不播放动画
                                     currentAnimationEngine?.apply {
-                                        animationPath?.getStateAtTime(position)
-                                            ?.apply(this::applyState)
+                                        this.animationPath.getStateAtTime(position)
+                                            .apply(this::applyState)
                                     }
                                 }
 
                                 override fun onTimelineExtensionRequest(currentDuration: Long): Long {
-                                    // 时间轴扩展，每次增加 2 秒
+                                    // 时间轴扩展，每次增加EXTENSION_STEP
                                     val newDuration = currentDuration + EXTENSION_STEP
 
                                     // 更新当前动画路径的时长
-                                    currentAnimationPath = currentAnimationPath?.copy(durationMs = newDuration)
+                                    currentAnimationPath?.apply {
+                                        currentAnimationEngine?.animationPath = copy(durationMs = if (newDuration >= 10000L) 10000L else newDuration)
+                                    }
 
                                     // 同步到保存管理器并标记为已修改
                                     currentAnimationPath?.let {
@@ -1651,9 +1711,32 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
 
                                     return newDuration
                                 }
+
+                                override fun onTimelineContractionRequest(currentDuration: Long): Long {
+                                    // 时间轴收缩，每次减少EXTENSION_STEP
+                                    val newDuration = currentDuration - EXTENSION_STEP
+
+                                    // 更新当前动画路径的时长
+                                    currentAnimationPath?.apply {
+                                        currentAnimationEngine?.animationPath = copy(durationMs = if (newDuration <= 1000L) 1000L else newDuration)
+                                    }
+
+                                    // 同步到保存管理器并标记为已修改
+                                    currentAnimationPath?.let {
+                                        animationSaveManager.setCurrentAnimation(animationSaveManager.getCurrentImageId(), it)
+                                    }
+                                    animationSaveManager.markAsDirty()
+
+                                    return newDuration
+                                }
+
+                                override fun onKeyFrameLongPress(keyFrameTime: Long) {
+                                    deleteKeyFrame(keyFrameTime)
+                                    engine.reCalculateStateAndApply()
+                                }
                             }
                             // 有动画时，保持原有的帧更新回调
-                            engine?.onFrameUpdate = { elapsedTimeMs ->
+                            engine.onFrameUpdate = { elapsedTimeMs ->
                                 val now = System.currentTimeMillis()
                                 // 节流：每 50ms 更新一次时间轴（20fps）
                                 if (now - lastTimelineUpdateTime >= TIMELINE_UPDATE_INTERVAL_MS) {
@@ -1662,7 +1745,10 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                                 }
                             }
 
-                            engine?.start()
+                            // 非空自动播放
+                            if (currentAnimationPath.isEmpty().not()) {
+                                engine.start()
+                            }
                         }
                     }
                 }
@@ -2569,4 +2655,6 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             binding.viewerContainer.setLayerType(View.LAYER_TYPE_HARDWARE, paint)
         }
     }
+
+    private fun Long?.getImageId() = this ?: 0L
 }

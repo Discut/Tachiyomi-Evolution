@@ -59,4 +59,12 @@ val migrationObjets = listOf(
             }
         }
     },
+
+    // 版本 4 -> 5: AnimationSequence 主键添加 autoGenerate
+    // 表结构不变，只是 Room 现在会在插入时自动生成 ID
+    object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // 不需要任何 SQL 操作，表结构不变
+        }
+    },
 )

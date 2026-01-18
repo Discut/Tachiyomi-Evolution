@@ -264,14 +264,29 @@ class KeyFrameTimelineView @JvmOverloads constructor(
                     cursorX -= distanceX
 
                     // 检测光标是否到达最右侧（需要扩展时间轴）
-                    val wasAtEdge = cursorX >= maxCursorX
+                    val wasAtRightEdge = cursorX >= maxCursorX
+                    val wasAtLeftEdge = cursorX <= 0
                     clampCursor()
 
                     // 如果光标被限制在边缘，尝试扩展时间轴
-                    if (wasAtEdge && cursorX >= maxCursorX && distanceX > 0) {
+                    if (wasAtRightEdge && distanceX.isToRight()) {
                         val adapter = adapter ?: return false
                         val currentDuration = adapter.getDuration()
                         val newDuration = adapter.onTimelineExtensionRequest(currentDuration)
+                        if (newDuration > currentDuration) {
+                            // 时间轴已扩展，重新计算 trackWidth
+                            val availableWidth = width - paddingLeft - paddingRight
+                            trackWidth = availableWidth - trackPadding * 2
+                            prevTrackWidth = trackWidth
+                            // 再次尝试移动光标
+                            cursorX -= distanceX
+                            clampCursor()
+                            ViewCompat.postInvalidateOnAnimation(this@KeyFrameTimelineView)
+                        }
+                    } else if (wasAtLeftEdge && distanceX.isToLeft()) {
+                        val adapter = adapter ?: return false
+                        val currentDuration = adapter.getDuration()
+                        val newDuration = adapter.onTimelineContractionRequest(currentDuration)
                         if (newDuration > currentDuration) {
                             // 时间轴已扩展，重新计算 trackWidth
                             val availableWidth = width - paddingLeft - paddingRight
@@ -289,6 +304,10 @@ class KeyFrameTimelineView @JvmOverloads constructor(
                     return true
                 }
                 return false
+            }
+
+            override fun onLongPress(e: MotionEvent) {
+                handleKeyFrameLongPress(e.x, e.y)
             }
 
             override fun onSingleTapUp(e: MotionEvent): Boolean {
@@ -626,6 +645,42 @@ class KeyFrameTimelineView @JvmOverloads constructor(
         invalidate()
     }
 
+    /**
+     * 处理长按关键帧事件
+     * @param x 触摸点的 x 坐标
+     * @param y 触摸点的 y 坐标
+     */
+    private fun handleKeyFrameLongPress(x: Float, y: Float) {
+        val adapter = adapter ?: return
+        val keyFrames = adapter.getKeyFrames()
+        if (keyFrames.isEmpty()) return
+
+        val durationMs = adapter.getDuration().toFloat()
+        if (durationMs <= 0) return
+
+        // 转换坐标到 padding 内部
+        val drawHeight = height - paddingTop - paddingBottom
+        val centerY = drawHeight / 2f + paddingTop
+
+        // 关键帧的触摸半径（比绘制的半径稍大，便于触摸）
+        val keyFrameTouchRadius = dp24
+
+        // 检查是否触摸到某个关键帧
+        for (timeMs in keyFrames) {
+            val ratio = timeMs / durationMs
+            val drawX = paddingLeft + trackPadding + ratio * trackWidth
+
+            // 计算触摸点到关键帧中心的距离
+            val distance = sqrt((x - drawX).pow(2) + (y - centerY).pow(2))
+
+            if (distance <= keyFrameTouchRadius) {
+                // 触摸到关键帧，触发长按回调
+                adapter.onKeyFrameLongPress(timeMs)
+                return
+            }
+        }
+    }
+
     private fun resetInteractionLock() {
         isUserInteracting = false
     }
@@ -697,6 +752,10 @@ class KeyFrameTimelineView @JvmOverloads constructor(
         return getDefaultBackgroundColor()
     }
 
+    private fun Float.isToRight() = this < 0
+
+    private fun Float.isToLeft() = this > 0
+
     // ==================== 接口定义 ====================
 
     interface TimelineAdapter {
@@ -713,5 +772,20 @@ class KeyFrameTimelineView @JvmOverloads constructor(
         fun onTimelineExtensionRequest(currentDuration: Long): Long {
             return currentDuration
         }
+
+        /**
+         * 当光标拖动到时间轴最左侧时调用，用于收缩时间轴长度
+         * @param currentDuration 当前时长
+         * @return 收缩后的新时长，如果不收缩则返回 currentDuration
+         */
+        fun onTimelineContractionRequest(currentDuration: Long): Long {
+            return currentDuration
+        }
+
+        /**
+         * 长按关键帧时调用，用于删除关键帧
+         * @param keyFrameTime 被长按的关键帧时间
+         */
+        fun onKeyFrameLongPress(keyFrameTime: Long) {}
     }
 }

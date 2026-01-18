@@ -29,7 +29,7 @@ import eu.kanade.tachiyomi.data.database.tables.AnimationSequenceTable
     ],
 )
 data class AnimationSequence(
-    @PrimaryKey
+    @PrimaryKey(autoGenerate = true)
     @ColumnInfo(name = AnimationSequenceTable.ID)
     val id: Long = 0,
 

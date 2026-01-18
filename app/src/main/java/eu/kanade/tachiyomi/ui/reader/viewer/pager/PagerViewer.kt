@@ -211,7 +211,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : BaseViewer, OnHolderE
     /**
      * Returns the PagerPageHolder for the provided page
      */
-    private fun getPageHolder(page: ReaderPage): PagerPageHolder? =
+    fun getPageHolder(page: ReaderPage): PagerPageHolder? =
         pager.children
             .filterIsInstance(PagerPageHolder::class.java)
             .firstOrNull { it.item.first.index == page.index || it.item.second?.index == page.index }

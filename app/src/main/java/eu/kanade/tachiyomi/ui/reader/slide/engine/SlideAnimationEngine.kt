@@ -128,6 +128,15 @@ class SlideAnimationEngine(
     }
 
     /**
+     * 重新计算当前状态并应用
+     */
+    fun reCalculateStateAndApply() {
+        animationPath.getStateAtTime(elapsedTime).apply {
+            applyState(this)
+        }
+    }
+
+    /**
      * 将视图状态应用到图片视图
      */
     fun applyState(state: ImageViewState) {

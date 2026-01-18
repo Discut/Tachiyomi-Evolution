@@ -25,7 +25,16 @@ class SlidePageHolder(
     /**
      * 动画路径配置
      */
-    var animationPath: SlideAnimationPath? = null
+    var animationPath: SlideAnimationPath?
+        get() {
+            return animationEngine?.animationPath
+        }
+        set(value) {
+            if (value == null) {
+                return
+            }
+            animationEngine?.animationPath = value
+        }
 
     /**
      * 是否启用动画
@@ -52,11 +61,11 @@ class SlidePageHolder(
 
     override fun onImageLoaded() {
         super.onImageLoaded()
-        if (isAnimationEnabled) {
+/*        if (isAnimationEnabled) {
             startAnimation()
         } else {
             stopAnimation()
-        }
+        }*/
         onHolderEvent?.onLoaded(this)
     }
 

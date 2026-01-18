@@ -80,6 +80,10 @@ data class SlideAnimationPath(
     }
 }
 
+fun SlideAnimationPath?.isEmpty(): Boolean {
+    return this?.keyFrames?.isEmpty() ?: true
+}
+
 /**
  * 关键帧
  * 定义特定时间点的视图状态

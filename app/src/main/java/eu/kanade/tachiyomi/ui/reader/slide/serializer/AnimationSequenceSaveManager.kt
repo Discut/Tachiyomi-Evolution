@@ -7,6 +7,7 @@ import eu.kanade.tachiyomi.data.orm.GalleryDatabase
 import eu.kanade.tachiyomi.data.orm.models.AnimationSequence
 import eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationPath
 import eu.kanade.tachiyomi.util.system.toast
+import eu.kanade.tachiyomi.util.system.withIOContext
 import eu.kanade.tachiyomi.util.system.withUIContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -86,7 +87,9 @@ class AnimationSequenceSaveManager(
         saveRunnable?.let { saveHandler.removeCallbacks(it) }
 
         saveRunnable = Runnable {
-            saveImmediately()
+            scope.launch(Dispatchers.IO) {
+                saveImmediately()
+            }
             isDirty = false
         }
         saveHandler.postDelayed(saveRunnable!!, saveDelayMs)
@@ -97,11 +100,10 @@ class AnimationSequenceSaveManager(
      *
      * 如果当前没有设置动画或图片 ID，则不执行保存
      */
-    fun saveImmediately() {
-        val path = currentAnimationPath ?: return
-        val imageId = currentImageId ?: return
-
-        scope.launch(Dispatchers.IO) {
+    suspend fun saveImmediately() =
+        withIOContext {
+            val path = currentAnimationPath ?: return@withIOContext
+            val imageId = currentImageId ?: return@withIOContext
             try {
                 saveToDatabase(imageId, path)
                 withUIContext {
@@ -115,7 +117,6 @@ class AnimationSequenceSaveManager(
                 }
             }
         }
-    }
 
     /**
      * 检查是否有未保存的修改
@@ -196,6 +197,11 @@ class AnimationSequenceSaveManager(
         val db = GalleryDatabase.getDatabase(context)
         val dao = db.getAnimationSequenceDao()
 
+        if (path.keyFrames.isEmpty()) {
+            dao.deleteByImageId(imageId)
+            return
+        }
+
         // 序列化动画路径
         val json = AnimationSequenceSerializer.serialize(path)
 
@@ -208,6 +214,7 @@ class AnimationSequenceSaveManager(
                 durationMs = path.durationMs,
                 data = json,
                 updatedAt = System.currentTimeMillis(),
+                version = existing.version + 1
             )
             dao.update(updated)
         } else {

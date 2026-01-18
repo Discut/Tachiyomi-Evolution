@@ -34,7 +34,7 @@ import java.util.concurrent.Executors
         DBTagType::class,
         DBDiffGroupImage::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 @TypeConverters(BigDecimalConverter::class)
