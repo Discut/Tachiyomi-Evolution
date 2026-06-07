@@ -24,7 +24,7 @@ data class SlideAnimationPath(
      */
     fun getStateAtTime(elapsedTimeMs: Long): ImageViewState {
         if (keyFrames.isEmpty()) {
-            return ImageViewState.Companion.default()
+            return ImageViewState.default()
         }
 
         // 如果超出总时长，返回最后一个关键帧状态
@@ -64,8 +64,8 @@ data class SlideAnimationPath(
         progress: Float,
     ): ImageViewState {
         return ImageViewState(
-            normalizedTranslationX = lerp(start.normalizedTranslationX, end.normalizedTranslationX, progress),
-            normalizedTranslationY = lerp(start.normalizedTranslationY, end.normalizedTranslationY, progress),
+            normalizedSourceCenterX = lerp(start.normalizedSourceCenterX, end.normalizedSourceCenterX, progress),
+            normalizedSourceCenterY = lerp(start.normalizedSourceCenterY, end.normalizedSourceCenterY, progress),
             normalizedScale = lerp(start.normalizedScale, end.normalizedScale, progress),
             rotation = lerp(start.rotation, end.rotation, progress),
             pivotX = lerp(start.pivotX, end.pivotX, progress),
@@ -104,33 +104,33 @@ data class KeyFrame(
  * @param durationMs 动画总时长
  * @param fromScale 起始缩放比例（相对于 fitScale）
  * @param toScale 目标缩放比例（相对于 fitScale）
- * @param centerX 缩放中心X坐标（0-1）
- * @param centerY 缩放中心Y坐标（0-1）
+ * @param centerXFrac 缩放中心的源图片X坐标（0-1，相对于 sWidth，0.5=图片中心）
+ * @param centerYFrac 缩放中心的源图片Y坐标（0-1，相对于 sHeight，0.5=图片中心）
  */
 fun createScaleAnimationPath(
     durationMs: Long,
     fromScale: Float = 1f,
     toScale: Float = 1.5f,
-    centerX: Float = 0.5f,
-    centerY: Float = 0.5f,
+    centerXFrac: Float = 0.5f,
+    centerYFrac: Float = 0.5f,
 ): SlideAnimationPath {
     val startState = ImageViewState(
-        normalizedTranslationX = 0f,
-        normalizedTranslationY = 0f,
+        normalizedSourceCenterX = centerXFrac,
+        normalizedSourceCenterY = centerYFrac,
         normalizedScale = fromScale,
         rotation = 0f,
-        pivotX = centerX,
-        pivotY = centerY,
+        pivotX = 0.5f,
+        pivotY = 0.5f,
         alpha = 1f,
     )
 
     val endState = ImageViewState(
-        normalizedTranslationX = 0f,
-        normalizedTranslationY = 0f,
+        normalizedSourceCenterX = centerXFrac,
+        normalizedSourceCenterY = centerYFrac,
         normalizedScale = toScale,
         rotation = 0f,
-        pivotX = centerX,
-        pivotY = centerY,
+        pivotX = 0.5f,
+        pivotY = 0.5f,
         alpha = 1f,
     )
 
@@ -147,23 +147,23 @@ fun createScaleAnimationPath(
  * 扩展函数：创建摄像机移动的关键帧路径
  *
  * @param durationMs 动画总时长
- * @param startX 起始X偏移（相对于图片宽度，0-1）
- * @param startY 起始Y偏移（相对于图片高度，0-1）
- * @param endX 目标X偏移（相对于图片宽度，0-1）
- * @param endY 目标Y偏移（相对于图片高度，0-1）
+ * @param startXFrac 起始源图片X坐标（0-1，相对于 sWidth）
+ * @param startYFrac 起始源图片Y坐标（0-1，相对于 sHeight）
+ * @param endXFrac 目标源图片X坐标（0-1，相对于 sWidth）
+ * @param endYFrac 目标源图片Y坐标（0-1，相对于 sHeight）
  * @param scale 缩放比例（相对于 fitScale）
  */
 fun createPanAnimationPath(
     durationMs: Long,
-    startX: Float = 0f,
-    startY: Float = 0f,
-    endX: Float = 0.1f,
-    endY: Float = 0.1f,
+    startXFrac: Float = 0.5f,
+    startYFrac: Float = 0.5f,
+    endXFrac: Float = 0.6f,
+    endYFrac: Float = 0.6f,
     scale: Float = 1.2f,
 ): SlideAnimationPath {
     val startState = ImageViewState(
-        normalizedTranslationX = startX,
-        normalizedTranslationY = startY,
+        normalizedSourceCenterX = startXFrac,
+        normalizedSourceCenterY = startYFrac,
         normalizedScale = scale,
         rotation = 0f,
         pivotX = 0.5f,
@@ -172,8 +172,8 @@ fun createPanAnimationPath(
     )
 
     val endState = ImageViewState(
-        normalizedTranslationX = endX,
-        normalizedTranslationY = endY,
+        normalizedSourceCenterX = endXFrac,
+        normalizedSourceCenterY = endYFrac,
         normalizedScale = scale,
         rotation = 0f,
         pivotX = 0.5f,
@@ -196,23 +196,23 @@ fun createPanAnimationPath(
  * @param durationMs 动画总时长
  * @param fromScale 起始缩放（相对于 fitScale）
  * @param toScale 目标缩放（相对于 fitScale）
- * @param startX 起始X偏移（相对于图片宽度，0-1）
- * @param startY 起始Y偏移（相对于图片高度，0-1）
- * @param endX 目标X偏移（相对于图片宽度，0-1）
- * @param endY 目标Y偏移（相对于图片高度，0-1）
+ * @param startXFrac 起始源图片X坐标（0-1）
+ * @param startYFrac 起始源图片Y坐标（0-1）
+ * @param endXFrac 目标源图片X坐标（0-1）
+ * @param endYFrac 目标源图片Y坐标（0-1）
  */
 fun createCombinedAnimationPath(
     durationMs: Long,
     fromScale: Float = 1f,
     toScale: Float = 1.3f,
-    startX: Float = -0.05f,
-    startY: Float = -0.03f,
-    endX: Float = 0.05f,
-    endY: Float = 0.03f,
+    startXFrac: Float = 0.45f,
+    startYFrac: Float = 0.47f,
+    endXFrac: Float = 0.55f,
+    endYFrac: Float = 0.53f,
 ): SlideAnimationPath {
     val startState = ImageViewState(
-        normalizedTranslationX = startX,
-        normalizedTranslationY = startY,
+        normalizedSourceCenterX = startXFrac,
+        normalizedSourceCenterY = startYFrac,
         normalizedScale = fromScale,
         rotation = 0f,
         pivotX = 0.5f,
@@ -221,8 +221,8 @@ fun createCombinedAnimationPath(
     )
 
     val middleState = ImageViewState(
-        normalizedTranslationX = 0f,
-        normalizedTranslationY = 0f,
+        normalizedSourceCenterX = 0.5f,
+        normalizedSourceCenterY = 0.5f,
         normalizedScale = toScale,
         rotation = 0f,
         pivotX = 0.5f,
@@ -231,8 +231,8 @@ fun createCombinedAnimationPath(
     )
 
     val endState = ImageViewState(
-        normalizedTranslationX = endX,
-        normalizedTranslationY = endY,
+        normalizedSourceCenterX = endXFrac,
+        normalizedSourceCenterY = endYFrac,
         normalizedScale = toScale,
         rotation = 0f,
         pivotX = 0.5f,

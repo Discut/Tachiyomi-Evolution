@@ -287,7 +287,7 @@ class KeyFrameTimelineView @JvmOverloads constructor(
                         val adapter = adapter ?: return false
                         val currentDuration = adapter.getDuration()
                         val newDuration = adapter.onTimelineContractionRequest(currentDuration)
-                        if (newDuration > currentDuration) {
+                        if (newDuration < currentDuration) {
                             // 时间轴已扩展，重新计算 trackWidth
                             val availableWidth = width - paddingLeft - paddingRight
                             trackWidth = availableWidth - trackPadding * 2

@@ -30,6 +30,9 @@ class SlideAnimationEngine(
     // 每帧进度回调（用于同步时间轴等 UI）
     var onFrameUpdate: ((elapsedTimeMs: Long) -> Unit)? = null
 
+    // 跟踪平移限制是否已放宽（用于避免重复设置）
+    private var isPanLimitRelaxed: Boolean = false
+
     /**
      * 启动动画
      */
@@ -43,6 +46,9 @@ class SlideAnimationEngine(
             Timber.w("ImageView is null, cannot start animation")
             return
         }
+
+        // 保存原始平移限制并放宽
+        relaxPanLimit()
 
         isRunning = true
         startTime = SystemClock.elapsedRealtime()
@@ -82,6 +88,10 @@ class SlideAnimationEngine(
 
     /**
      * 停止动画
+     *
+     * 注意：不再自动恢复 pan limit。pan limit 的生命周期由 ReaderActivity 的
+     * 幻灯片模式（isTimelinePanelExpanded）统一管理，以避免动画结束后
+     * 强制弹回填屏位置造成的视觉跳动。
      */
     fun stop() {
         isRunning = false
@@ -90,6 +100,7 @@ class SlideAnimationEngine(
         }
         frameCallback = null
         choreographer = null
+
         Timber.d("Slide animation stopped")
     }
 
@@ -109,8 +120,8 @@ class SlideAnimationEngine(
      */
     fun resume() {
         if (isRunning) {
-            // 调整开始时间以实现无缝恢复
-            startTime = SystemClock.elapsedRealtime() - (SystemClock.elapsedRealtime() - startTime)
+            // 调整开始时间以实现无缝恢复（扣除暂停期间的时间）
+            startTime = SystemClock.elapsedRealtime() - elapsedTime
             frameCallback?.let {
                 choreographer?.postFrameCallback(it)
             }
@@ -119,12 +130,44 @@ class SlideAnimationEngine(
 
     /**
      * 重置动画到初始状态
+     *
+     * 停止动画并将图片恢复到第一个关键帧位置。
+     * pan limit 由外部（ReaderActivity）根据幻灯片模式统一管理。
      */
     fun reset() {
         stop()
         if (imageView != null) {
             applyState(animationPath.getStateAtTime(0))
         }
+    }
+
+    /**
+     * 放宽平移限制 — 允许图片自由定位（幻灯片模式下调用）
+     *
+     * 使用 PAN_LIMIT_OUTSIDE（允许图片边缘超过屏幕边缘）
+     * 这样可以确保在不同屏幕方向上都能应用相同的关键帧。
+     * 由 ReaderActivity 根据幻灯片模式生命周期统一管理。
+     */
+    fun relaxPanLimit() {
+        if (imageView == null || isPanLimitRelaxed) return
+
+        imageView.setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_OUTSIDE)
+        isPanLimitRelaxed = true
+        Timber.d("Pan limit relaxed to PAN_LIMIT_OUTSIDE")
+    }
+
+    /**
+     * 恢复默认平移限制 — 退出幻灯片模式时调用
+     *
+     * 恢复为 PAN_LIMIT_INSIDE，图片自动回弹填满屏幕。
+     * 由 ReaderActivity 在退出幻灯片模式时调用。
+     */
+    fun restorePanLimit() {
+        if (imageView == null || !isPanLimitRelaxed) return
+
+        imageView.setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_INSIDE)
+        isPanLimitRelaxed = false
+        Timber.d("Pan limit restored to PAN_LIMIT_INSIDE")
     }
 
     /**
@@ -139,7 +182,14 @@ class SlideAnimationEngine(
     /**
      * 将视图状态应用到图片视图
      *
-     * 处理归一化值：将归一化的 translation 和 scale 转换为实际值
+     * 使用 normalizedSourceCenter 直接还原为 sourceCenter 坐标，
+     * 避免了 V2 版本中 translation → sourceCenter 转换在横竖屏切换时的误差。
+     *
+     * 归一化规则：
+     * - normalizedScale: 相对于 fitScale 的倍数
+     * - normalizedSourceCenterX/Y: 相对于 sWidth/sHeight 的比例（0.0~1.0）
+     *
+     * 注意：平移限制由动画级别管理（start/stop），此处不需要处理
      */
     fun applyState(state: ImageViewState) {
         if (imageView == null) return
@@ -155,25 +205,14 @@ class SlideAnimationEngine(
             // 反归一化：计算实际的缩放值
             val actualScale = state.normalizedScale * fitScale
 
-            // 获取图片原始尺寸
-            val imageWidth = imageView.sWidth.toFloat()
-            val imageHeight = imageView.sHeight.toFloat()
-
-            // 反归一化：计算实际的平移值（像素）
-            val actualTranslationX = state.normalizedTranslationX * imageWidth
-            val actualTranslationY = state.normalizedTranslationY * imageHeight
-
-            // 计算视图中心
-            val viewCenterX = imageView.sWidth / 2f
-            val viewCenterY = imageView.sHeight / 2f
-
-            // 根据公式计算源图片中心点
-            val sourceCenterX = viewCenterX - actualTranslationX / actualScale
-            val sourceCenterY = viewCenterY - actualTranslationY / actualScale
+            // 反归一化：直接计算源图片中心坐标（横竖屏无关）
+            val sourceCenterX = state.normalizedSourceCenterX * imageView.sWidth
+            val sourceCenterY = state.normalizedSourceCenterY * imageView.sHeight
 
             val sourceCenter = PointF(sourceCenterX, sourceCenterY)
 
             // 应用缩放和中心
+            // 平移限制已由动画级别管理（start/stop时设置 PAN_LIMIT_OUTSIDE）
             imageView.setScaleAndCenter(actualScale, sourceCenter)
 
             // 应用旋转
@@ -198,12 +237,15 @@ class SlideAnimationEngine(
     /**
      * 跳转到指定进度
      *
+     * pan limit 由外部统一管理，此处直接应用状态不做 relax/restore。
+     *
      * @param progress 进度值（0-1）
      */
     fun seekTo(progress: Float) {
         val clampedProgress = progress.coerceIn(0f, 1f)
         val targetTime = (animationPath.durationMs * clampedProgress).toLong()
         val state = animationPath.getStateAtTime(targetTime)
+
         applyState(state)
 
         // 如果正在运行，调整开始时间

@@ -157,40 +157,40 @@ class SlidePageHolder(
      * @param type 动画类型
      * @param durationMs 动画时长
      */
-    @Deprecated("")
+    @Deprecated("预设动画使用旧的像素值参数")
     fun setAnimationByType(type: AnimationType, durationMs: Long = 3000L) {
         val path = when (type) {
             AnimationType.SCALE_CENTER -> createScaleAnimationPath(
                 durationMs = durationMs,
                 fromScale = 1.0f,
                 toScale = 1.5f,
-                centerX = 0.5f,
-                centerY = 0.5f,
+                centerXFrac = 0.5f,
+                centerYFrac = 0.5f,
             )
             AnimationType.PAN_HORIZONTAL -> createPanAnimationPath(
                 durationMs = durationMs,
-                startX = -100f,
-                startY = 0f,
-                endX = 100f,
-                endY = 0f,
+                startXFrac = 0.4f,
+                startYFrac = 0.5f,
+                endXFrac = 0.6f,
+                endYFrac = 0.5f,
                 scale = 1.2f,
             )
             AnimationType.PAN_VERTICAL -> createPanAnimationPath(
                 durationMs = durationMs,
-                startX = 0f,
-                startY = -80f,
-                endX = 0f,
-                endY = 80f,
+                startXFrac = 0.5f,
+                startYFrac = 0.4f,
+                endXFrac = 0.5f,
+                endYFrac = 0.6f,
                 scale = 1.2f,
             )
             AnimationType.DIAGONAL -> createCombinedAnimationPath(
                 durationMs = durationMs,
                 fromScale = 1.0f,
                 toScale = 1.3f,
-                startX = -80f,
-                startY = -50f,
-                endX = 80f,
-                endY = 50f,
+                startXFrac = 0.45f,
+                startYFrac = 0.45f,
+                endXFrac = 0.55f,
+                endYFrac = 0.55f,
             )
         }
         setAnimationPath(path, isAnimationEnabled)

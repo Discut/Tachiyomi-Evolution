@@ -695,6 +695,14 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
 
             // 更新面板内容
             updateTimelinePanelContent()
+
+            // 进入幻灯片模式：放宽平移限制 + 启动动画（如果存在）
+            currentAnimationEngine?.apply {
+                relaxPanLimit()
+                if (currentAnimationPath.isEmpty().not() && !isActive()) {
+                    start()
+                }
+            }
         } else {
             // 收起面板
             val currentHeight = panel.height
@@ -730,6 +738,12 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
 
             // 更新按钮图标为向下箭头
             toggleBtn.setImageResource(R.drawable.ic_expand_more_24dp)
+
+            // 退出幻灯片模式：停止动画 + 恢复平移限制，图片回弹填满屏幕
+            currentAnimationEngine?.apply {
+                if (isActive()) stop()
+                restorePanLimit()
+            }
         }
     }
 
@@ -846,6 +860,9 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         // 更新面板内容
         updateTimelinePanelContent()
 
+        // 刷新图片视图，显示当前时间点的插值状态
+        currentAnimationEngine?.reCalculateStateAndApply()
+
         toast("已合并关键帧: ${currentTime / 1000f}s")
     }
 
@@ -894,16 +911,16 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
     }
 
     /**
-     * 从 SubsamplingScaleImageView 获取当前的 ImageViewState（使用归一化值）
+     * 从 SubsamplingScaleImageView 获取当前的 ImageViewState（使用归一化值 V3）
      *
      * 归一化说明：
+     * - normalizedSourceCenterX/Y: 相对于图片原始尺寸（sWidth/sHeight）的比例，0.5=图片中心
      * - normalizedScale: 相对于 fitScale 的倍数
-     * - normalizedTranslationX/Y: 相对于图片尺寸的比例
+     *
+     * 新坐标系直接存储 sourceCenter，避免 translation → sourceCenter 转换在横竖屏切换时的误差。
+     * sWidth/sHeight 是图片原始像素尺寸，在不同屏幕方向上保持不变。
      */
     private fun getImageViewState(imageView: SubsamplingScaleImageView): eu.kanade.tachiyomi.ui.reader.slide.engine.ImageViewState {
-        val viewCenterX = imageView.sWidth / 2f
-        val viewCenterY = imageView.sHeight / 2f
-
         val currentCenter = imageView.center
         val sourceCenterX = currentCenter?.x ?: (imageView.sWidth / 2f)
         val sourceCenterY = currentCenter?.y ?: (imageView.sHeight / 2f)
@@ -912,24 +929,19 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         val currentScale = imageView.scale
         val fitScale = imageView.minScale
 
-        // 根据 applyState 的公式反向计算 translationX/Y（绝对像素值）
-        val translationX = (viewCenterX - sourceCenterX) * currentScale
-        val translationY = (viewCenterY - sourceCenterY) * currentScale
-
-        // 获取图片原始尺寸
+        // 获取图片原始尺寸（sWidth/sHeight 是图片原始像素尺寸，不同屏幕方向上保持不变）
         val imageWidth = imageView.sWidth
         val imageHeight = imageView.sHeight
 
-        return eu.kanade.tachiyomi.ui.reader.slide.engine.ImageViewState(
-            normalizedTranslationX = if (imageWidth > 0) translationX / imageWidth else 0f,
-            normalizedTranslationY = if (imageHeight > 0) translationY / imageHeight else 0f,
-            normalizedScale = if (fitScale > 0) currentScale / fitScale else 1f,
-            rotation = imageView.rotation,
-            pivotX = 0.5f,
-            pivotY = 0.5f,
-            alpha = imageView.alpha,
+        return eu.kanade.tachiyomi.ui.reader.slide.engine.createNormalizedImageViewState(
+            sourceCenterX = sourceCenterX,
+            sourceCenterY = sourceCenterY,
+            currentScale = currentScale,
+            fitScale = fitScale,
             imageWidth = imageWidth,
             imageHeight = imageHeight,
+            rotation = imageView.rotation,
+            alpha = imageView.alpha,
         )
     }
 
@@ -971,6 +983,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         snackbar = null
         autoPlayTimer?.cancelTickAndProgress()
         // 清理动画引擎回调，避免内存泄漏
+        currentAnimationEngine?.restorePanLimit()
         currentAnimationEngine?.onFrameUpdate = null
         currentAnimationEngine = null
         currentImageView = null
@@ -1802,6 +1815,9 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                     // 页面切换时保存上一页的动画（如果有未保存的修改）
                     saveTimePoint()
 
+                    // 离开上一页：恢复其平移限制（避免旧页停留在放松状态）
+                    currentAnimationEngine?.restorePanLimit()
+
                     // 获取当前图片 ID 和对应的 holder
                     // 如果 viewer 当前页面与 curPage 不同，且 viewer 是 PagerViewer，
                     // 尝试从 viewer 获取对应页面的 holder（用于处理 PagerViewer 的特殊情况）
@@ -1939,8 +1955,8 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                                 }
                             }
 
-                            // 非空自动播放
-                            if (currentAnimationPath.isEmpty().not()) {
+                            // 面板展开时自动播放
+                            if (currentAnimationPath.isEmpty().not() && isTimelinePanelExpanded) {
                                 engine.start()
                             }
                         }
