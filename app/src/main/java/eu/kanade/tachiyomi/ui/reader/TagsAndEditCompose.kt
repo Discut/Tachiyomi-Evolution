@@ -30,6 +30,7 @@ fun TagsAndEdit(
     tags: List<TagBo>,
     isLoaded: Boolean,
     onClickEdit: () -> Unit,
+    onClickTag: (TagBo) -> Unit = {},
 ) {
     Row(
         modifier = Modifier
@@ -62,6 +63,7 @@ fun TagsAndEdit(
             ) {
                 Chip(
                     onClick = {
+                        onClickTag(tag)
                     },
                 ) {
                     Text(text = tag.tagValue)

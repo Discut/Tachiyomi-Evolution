@@ -5,46 +5,81 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:minHeight="500dp"
-    android:paddingHorizontal="8dp"
-    android:paddingTop="24dp"
-    android:paddingBottom="8dp"
     tools:context="eu.kanade.tachiyomi.ui.reader.sheet.TagSettingsSheet">
 
-    <LinearLayout
-        android:id="@+id/chips_linear_layout"
+    <!-- 单一滚动容器：关闭所有内部子滚动，由此处统一处理，避免与 BottomSheet 手势冲突 -->
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical">
+        android:fillViewport="true"
+        android:paddingHorizontal="8dp"
+        android:paddingTop="24dp"
+        android:paddingBottom="8dp">
 
-        <androidx.core.widget.NestedScrollView
-            android:id="@+id/tags_nested_scroll_view"
+        <LinearLayout
+            android:id="@+id/chips_linear_layout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:maxHeight="400dp"
-            tools:layout_height="400dp">
+            android:orientation="vertical">
 
-            <com.google.android.material.chip.ChipGroup
-                android:id="@+id/tags_group"
+            <androidx.core.widget.NestedScrollView
+                android:id="@+id/tags_nested_scroll_view"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-        </androidx.core.widget.NestedScrollView>
+                android:layout_height="wrap_content"
+                android:fillViewport="false"
+                android:maxHeight="400dp"
+                tools:layout_height="400dp">
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/textField"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginVertical="16dp"
-            android:hint="Tag"
-            app:startIconDrawable="@drawable/ic_search_24dp">
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/tags_group"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+            </androidx.core.widget.NestedScrollView>
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:layout_marginBottom="10dp"
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/textField"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="16dp"
+                android:hint="Tag"
+                app:startIconDrawable="@drawable/ic_search_24dp">
 
-        </com.google.android.material.textfield.TextInputLayout>
+                <com.google.android.material.textfield.TextInputEditText
+                    android:layout_marginBottom="10dp"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
 
+            </com.google.android.material.textfield.TextInputLayout>
 
-    </LinearLayout>
+            <!-- AI 智能打标区域 -->
+            <Button
+                android:id="@+id/ai_tag_button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="AI智能打标"
+                style="@style/Widget.Material3.Button.TonalButton" />
+
+            <ProgressBar
+                android:id="@+id/ai_loading_progress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                android:visibility="gone"
+                tools:visibility="visible"/>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/ai_tag_results_recycler"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="gone"
+                tools:itemCount="10"
+                tools:listitem="@layout/item_ai_tag_result"
+                tools:visibility="visible" />
+
+        </LinearLayout>
+
+    </androidx.core.widget.NestedScrollView>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

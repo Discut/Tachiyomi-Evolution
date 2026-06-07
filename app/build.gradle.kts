@@ -326,6 +326,11 @@ dependencies {
     // reorder
     implementation("sh.calvin.reorderable:reorderable:2.4.3")
 
+    // model
+    implementation("org.tensorflow:tensorflow-lite:2.17.0")
+    implementation("org.tensorflow:tensorflow-lite-gpu:2.17.0")
+    implementation("org.tensorflow:tensorflow-lite-gpu-api:2.17.0")
+
 }
 
 tasks {

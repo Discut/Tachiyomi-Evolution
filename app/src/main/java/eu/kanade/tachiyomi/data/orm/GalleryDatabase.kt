@@ -34,7 +34,7 @@ import java.util.concurrent.Executors
         DBTagType::class,
         DBDiffGroupImage::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 @TypeConverters(BigDecimalConverter::class)
@@ -63,10 +63,11 @@ abstract class GalleryDatabase : RoomDatabase() {
                     db.execSQL(
                         """
                 INSERT OR IGNORE INTO tag_types (type_id, type_name)
-                VALUES 
+                VALUES
                     (1, 'author'),
                     (2, 'source'),
-                    (3, 'other')
+                    (3, 'other'),
+                    (4, 'auto')
                         """.trimIndent(),
                     )
                     db.setTransactionSuccessful()

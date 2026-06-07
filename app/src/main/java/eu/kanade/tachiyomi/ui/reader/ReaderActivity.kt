@@ -588,6 +588,8 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                             showMarkDialog(this)
                         }
                     },
+                    onClickTag = { tagBo ->
+                    },
                 )
             }
         }

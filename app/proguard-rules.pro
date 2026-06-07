@@ -82,6 +82,12 @@
 }
 ##---------------End: proguard configuration for kotlinx.serialization  ----------
 
+# TensorFlow Lite
+-keep class org.tensorflow.lite.** { *; }
+-keep interface org.tensorflow.lite.** { *; }
+-keep class org.tensorflow.lite.gpu.** { *; }
+-keep interface org.tensorflow.lite.gpu.** { *; }
+
 # Firebase
 -keep class com.google.firebase.installations.** { *; }
 -keep interface com.google.firebase.installations.** { *; }

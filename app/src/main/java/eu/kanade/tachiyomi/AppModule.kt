@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.data.orm.GalleryDatabase
 import eu.kanade.tachiyomi.data.preference.AndroidPreferenceStore
 import eu.kanade.tachiyomi.data.preference.PreferenceStore
 import eu.kanade.tachiyomi.data.preference.PreferencesHelper
+import eu.kanade.tachiyomi.data.tagger.WDTagger
 import eu.kanade.tachiyomi.data.track.TrackManager
 import eu.kanade.tachiyomi.data.track.TrackPreferences
 import eu.kanade.tachiyomi.extension.ExtensionManager
@@ -83,6 +84,9 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory {
             ImageCache(app)
         }
+
+
+        addSingletonFactory { WDTagger(app) }
 
         // Asynchronously init expensive components for a faster cold start
 

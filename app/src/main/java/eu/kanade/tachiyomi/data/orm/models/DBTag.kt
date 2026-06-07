@@ -55,7 +55,7 @@ data class DBTag(
 ) {
     // 业务层二次校验
     init {
-        requireValue(tagValue.length >= 2) { "标签长度不能小于2" }
+        requireValue(tagValue.isNotEmpty()) { "标签长度不能小于1" }
         require(typeId > 0) { "Invalid type ID" }
     }
 }

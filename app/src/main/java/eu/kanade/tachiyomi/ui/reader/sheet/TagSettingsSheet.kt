@@ -15,6 +15,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.view.allViews
 import androidx.core.view.children
 import androidx.core.widget.doOnTextChanged
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.transition.AutoTransition
 import androidx.transition.TransitionManager
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -22,9 +23,11 @@ import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.databinding.ItemAiTagResultBinding
 import eu.kanade.tachiyomi.databinding.ReaderTagSettingsSheetBinding
 import eu.kanade.tachiyomi.model.IImageBo
 import eu.kanade.tachiyomi.model.ImageBO
+import eu.kanade.tachiyomi.model.UnionImageBO
 import eu.kanade.tachiyomi.util.system.launchIO
 import eu.kanade.tachiyomi.util.system.launchUI
 import eu.kanade.tachiyomi.util.system.toast
@@ -78,6 +81,7 @@ class TagSettingsSheet(
         behavior.maxHeight = (activity.window.decorView.measuredHeight / 0.8).toInt()
 
         initCollection()
+        setupAITagging()
     }
 
     private fun initCollection() {
@@ -186,6 +190,109 @@ class TagSettingsSheet(
 
         binding.tagsGroup.addView(chip)
         return chip
+    }
+
+    // ========== AI 智能打标 ==========
+
+    private val aiTagAdapter by lazy {
+        AITagResultAdapter { result ->
+            scope.launchIO {
+                viewModel.adoptAITag(result)
+            }
+        }
+    }
+
+    private fun setupAITagging() {
+        // 关闭内部子滚动，避免与 BottomSheet 和外层 NestedScrollView 的手势冲突
+        binding.tagsNestedScrollView.isNestedScrollingEnabled = false
+        binding.aiTagResultsRecycler.isNestedScrollingEnabled = false
+
+        binding.aiTagResultsRecycler.layoutManager = LinearLayoutManager(context)
+        binding.aiTagResultsRecycler.adapter = aiTagAdapter
+
+        if (imageBO is UnionImageBO) {
+            binding.aiTagButton.isEnabled = false
+            binding.aiTagButton.text = "AI打标暂不支持对比视图"
+            return
+        }
+
+        binding.aiTagButton.setOnClickListener {
+            val filePath = imageBO.url
+            if (filePath.isBlank()) {
+                activity.toast("图片路径无效")
+                return@setOnClickListener
+            }
+            scope.launch {
+                try {
+                    viewModel.predictTags(filePath)
+                } catch (e: Exception) {
+                    Timber.e(e, "AI打标失败")
+                    activity.toast("AI打标失败: ${e.message}")
+                }
+            }
+        }
+
+        // 观察 AI 状态变化
+        scope.launch {
+            viewModel.aiPredictState.collectLatest { state ->
+                when (state) {
+                    AIPredictState.LOADING -> {
+                        showAILoading()
+                        binding.aiTagButton.isEnabled = false
+                    }
+
+                    AIPredictState.RESULTS -> {
+                        binding.aiTagButton.isEnabled = true
+                        showAIResults(viewModel.aiPredictResults.value)
+                    }
+
+                    AIPredictState.EMPTY -> {
+                        showAILoading()
+                        activity.toast("未识别到任何标签")
+                        binding.aiLoadingProgress.visibility = View.GONE
+                        binding.aiTagButton.isEnabled = true
+                    }
+
+                    AIPredictState.ERROR -> {
+                        binding.aiLoadingProgress.visibility = View.GONE
+                        binding.aiTagButton.isEnabled = true
+                    }
+
+                    AIPredictState.IDLE -> { // no-op
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showAILoading() {
+        binding.aiLoadingProgress.visibility = View.VISIBLE
+        binding.aiTagResultsRecycler.visibility = View.GONE
+        binding.aiTagButton.isEnabled = false
+    }
+
+    private fun showAIResults(results: List<AIPredictResult>) {
+        binding.aiLoadingProgress.visibility = View.GONE
+        binding.aiTagButton.isEnabled = true
+        binding.aiTagResultsRecycler.visibility = View.VISIBLE
+        aiTagAdapter.submitList(results.toList())
+    }
+
+    private fun onAITagClicked(result: AIPredictResult, itemBinding: ItemAiTagResultBinding) {
+        if (imageBO !is ImageBO) return
+        scope.launchIO {
+            try {
+                viewModel.adoptAITag(result)
+                scope.launch {
+                    itemBinding.progressFill.setBackgroundColor(0x33888888.toInt())
+                    itemBinding.root.alpha = 0.4f
+                    itemBinding.root.isClickable = false
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "采纳AI标签失败")
+                scope.launch { activity.toast("采纳失败: ${e.message}") }
+            }
+        }
     }
 
     private fun finishFloatingActionMode() {

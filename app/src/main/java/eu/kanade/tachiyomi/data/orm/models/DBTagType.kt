@@ -20,7 +20,7 @@ import eu.kanade.tachiyomi.data.orm.requireValue
 @Entity(
     tableName = "tag_types",
     // 复合约束配置
-    // check = "type_id BETWEEN 1 AND 3",  // ID范围约束
+    // check = "type_id BETWEEN 1 AND 4",  // ID范围约束
     indices = [Index(value = ["type_name"], unique = true)], // 类型名称唯一
 )
 data class DBTagType(
@@ -36,7 +36,7 @@ data class DBTagType(
 ) {
     // 业务层二次校验
     init {
-        require(typeId in 1..3) { "Invalid type ID: $typeId" }
+        require(typeId in 1..4) { "Invalid type ID: $typeId" }
         requireValue(typeName.isNotBlank()) { "类型名称不能为空" }
     }
 
@@ -45,5 +45,6 @@ data class DBTagType(
         AUTHOR(1, "author"),
         SOURCE(2, "source"),
         OTHER(3, "other"),
+        AUTO(4, "auto"),
     }
 }

@@ -67,4 +67,13 @@ val migrationObjets = listOf(
             // 不需要任何 SQL 操作，表结构不变
         }
     },
+
+    // 版本 5 -> 6: 新增 'auto' 标签类型 (AI 打标)
+    object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "INSERT OR IGNORE INTO tag_types (type_id, type_name) VALUES (4, 'auto')",
+            )
+        }
+    },
 )
