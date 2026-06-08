@@ -13,6 +13,7 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
 import androidx.core.content.res.use
+import androidx.core.graphics.toColorInt
 import androidx.core.view.ViewCompat
 import eu.kanade.tachiyomi.R
 import kotlin.math.abs
@@ -93,6 +94,14 @@ class KeyFrameTimelineView @JvmOverloads constructor(
     private var isDraggingCursor = false
     private var cursorTouchRadius = 0f
 
+    // 关键帧拖动状态
+    private var isDraggingKeyFrame = false
+    private var draggedKeyFrameOriginalTime: Long = 0L
+
+    // 查找关键帧的触摸半径（延迟初始化，因为 dp24 在 init 中计算）
+    private val keyFrameTouchRadius: Float
+        get() = dp24
+
     // ==================== Paint 对象 ====================
 
     private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -152,21 +161,21 @@ class KeyFrameTimelineView @JvmOverloads constructor(
 
         // 获取轨道颜色
         trackColor = if (isColorDark(backgroundColor)) {
-            Color.parseColor("#424242")
+            "#424242".toColorInt()
         } else {
-            Color.parseColor("#E0E0E0")
+            "#E0E0E0".toColorInt()
         }
 
         trackFillColor = if (theme.resolveAttribute(R.attr.colorPrimary, typedValue, true)) {
             typedValue.data
         } else {
-            Color.parseColor("#2979FF")
+            "#2979FF".toColorInt()
         }
 
         cursorColor = if (theme.resolveAttribute(R.attr.colorSecondary, typedValue, true)) {
             typedValue.data
         } else {
-            Color.parseColor("#FF4081")
+            "#FF4081".toColorInt()
         }
 
         keyFrameColor = if (theme.resolveAttribute(R.attr.colorOnPrimary, typedValue, true)) {
@@ -221,11 +230,20 @@ class KeyFrameTimelineView @JvmOverloads constructor(
         context,
         object : GestureDetector.SimpleOnGestureListener() {
             override fun onDown(e: MotionEvent): Boolean {
-                // 转换坐标到 padding 内部
+                // 优先检查是否触摸到关键帧
+                val hitFrame = findKeyFrameAtPosition(e.x, e.y)
+                if (hitFrame != null) {
+                    isDraggingKeyFrame = true
+                    draggedKeyFrameOriginalTime = hitFrame
+                    isUserInteracting = true
+                    lastInteractionTime = System.currentTimeMillis()
+                    return true
+                }
+
+                // 检查是否点击了光标区域
                 val drawHeight = height - paddingTop - paddingBottom
                 val centerY = drawHeight / 2f + paddingTop
 
-                // 检查是否点击了光标区域
                 val currentCursorScreenX = paddingLeft + trackPadding + cursorX
                 val distanceToCursor = sqrt(
                     (e.x - currentCursorScreenX).pow(2) + (e.y - centerY).pow(2),
@@ -247,11 +265,33 @@ class KeyFrameTimelineView @JvmOverloads constructor(
                 distanceX: Float,
                 distanceY: Float,
             ): Boolean {
-                // 判断是否为水平滑动手势（水平移动距离明显大于垂直距离）
+                if (isDraggingKeyFrame) {
+                    // 拖拽关键帧：根据手指移动距离更新关键帧时间
+                    // distanceX 是手指移动的像素距离（正值=向左滑动），需要转换到时间
+                    val adapter = adapter ?: return false
+                    val durationMs = adapter.getDuration().toFloat()
+                    if (durationMs <= 0 || trackWidth <= 0) return false
+
+                    // 像素位移转时间偏移
+                    val timePerPixel = durationMs / trackWidth
+                    val timeDelta = (-distanceX * timePerPixel).toLong()
+
+                    val newTimeMs = (draggedKeyFrameOriginalTime + timeDelta)
+                        .coerceAtLeast(0L)
+
+                    // 通知 adapter 时间变更
+                    adapter.onKeyFrameTimeChanged(draggedKeyFrameOriginalTime, newTimeMs)
+                    // 更新本地跟踪的原始时间，使后续增量正确
+                    draggedKeyFrameOriginalTime = newTimeMs
+
+                    ViewCompat.postInvalidateOnAnimation(this@KeyFrameTimelineView)
+                    return true
+                }
+
+                // 判断是否为水平滑动手势
                 val isHorizontalScroll = abs(distanceX) > abs(distanceY) * 1.5f && abs(distanceX) > 8f
 
                 if (isDraggingCursor || (isHorizontalScroll && e1 != null)) {
-                    // 如果不在拖动状态但检测到水平滑动，先跳转光标到起点位置
                     if (!isDraggingCursor && e1 != null) {
                         val xInPadding = e1.x - paddingLeft
                         val newCursorX = (xInPadding - trackPadding).coerceIn(0f, trackWidth)
@@ -260,45 +300,9 @@ class KeyFrameTimelineView @JvmOverloads constructor(
                         isUserInteracting = true
                     }
 
-                    // 拖拽光标：distanceX 的方向与手势方向相反，需要取反
+                    // 拖拽光标
                     cursorX -= distanceX
-
-                    // 检测光标是否到达最右侧（需要扩展时间轴）
-                    val wasAtRightEdge = cursorX >= maxCursorX
-                    val wasAtLeftEdge = cursorX <= 0
                     clampCursor()
-
-                    // 如果光标被限制在边缘，尝试扩展时间轴
-                    if (wasAtRightEdge && distanceX.isToRight()) {
-                        val adapter = adapter ?: return false
-                        val currentDuration = adapter.getDuration()
-                        val newDuration = adapter.onTimelineExtensionRequest(currentDuration)
-                        if (newDuration > currentDuration) {
-                            // 时间轴已扩展，重新计算 trackWidth
-                            val availableWidth = width - paddingLeft - paddingRight
-                            trackWidth = availableWidth - trackPadding * 2
-                            prevTrackWidth = trackWidth
-                            // 再次尝试移动光标
-                            cursorX -= distanceX
-                            clampCursor()
-                            ViewCompat.postInvalidateOnAnimation(this@KeyFrameTimelineView)
-                        }
-                    } else if (wasAtLeftEdge && distanceX.isToLeft()) {
-                        val adapter = adapter ?: return false
-                        val currentDuration = adapter.getDuration()
-                        val newDuration = adapter.onTimelineContractionRequest(currentDuration)
-                        if (newDuration < currentDuration) {
-                            // 时间轴已扩展，重新计算 trackWidth
-                            val availableWidth = width - paddingLeft - paddingRight
-                            trackWidth = availableWidth - trackPadding * 2
-                            prevTrackWidth = trackWidth
-                            // 再次尝试移动光标
-                            cursorX -= distanceX
-                            clampCursor()
-                            ViewCompat.postInvalidateOnAnimation(this@KeyFrameTimelineView)
-                        }
-                    }
-
                     updateCurrentTimeFromCursor()
                     ViewCompat.postInvalidateOnAnimation(this@KeyFrameTimelineView)
                     return true
@@ -311,12 +315,20 @@ class KeyFrameTimelineView @JvmOverloads constructor(
             }
 
             override fun onSingleTapUp(e: MotionEvent): Boolean {
-                if (!isDraggingCursor) {
-                    // 转换坐标到 padding 内部
-                    val drawHeight = height - paddingTop - paddingBottom
-                    val centerY = drawHeight / 2f + paddingTop
-                    if (abs(e.y - centerY) < dp24) {
-                        handleTrackTap(e.x)
+                if (!isDraggingCursor && !isDraggingKeyFrame) {
+                    // 优先检查是否点击了关键帧
+                    val hitFrame = findKeyFrameAtPosition(e.x, e.y)
+                    if (hitFrame != null) {
+                        selectedKeyFrame = hitFrame
+                        adapter?.onKeyFrameSelected(hitFrame)
+                        invalidate()
+                    } else {
+                        // 点击轨道跳转光标
+                        val drawHeight = height - paddingTop - paddingBottom
+                        val centerY = drawHeight / 2f + paddingTop
+                        if (abs(e.y - centerY) < dp24) {
+                            handleTrackTap(e.x)
+                        }
                     }
                 }
                 resetInteractionLock()
@@ -542,49 +554,6 @@ class KeyFrameTimelineView @JvmOverloads constructor(
         canvas.drawCircle(centerX, centerY, cursorRadius + dp3, cursorGlowPaint)
         cursorGlowPaint.alpha = 255
 
-        // 上方时间文本背景
-        val currentTimeText = formatTime((currentProgress * durationMs).toLong())
-        textPaint.textSize = sp12
-        val textWidth = textPaint.measureText(currentTimeText)
-        val textBgPadding = dp6
-        val textBgWidth = textWidth + textBgPadding * 2
-        val textBgHeight = dp24
-        val textBgTop = trackTop - dp32
-        val textBgRect = RectF(
-            centerX - textBgWidth / 2,
-            textBgTop,
-            centerX + textBgWidth / 2,
-            textBgTop + textBgHeight,
-        )
-
-        // 时间文本背景圆角矩形
-        trackFillPaint.color = cursorColor
-        trackFillPaint.style = Paint.Style.FILL
-        trackFillPaint.alpha = 220
-        canvas.drawRoundRect(textBgRect, dp6, dp6, trackFillPaint)
-        trackFillPaint.alpha = 255
-
-        // 时间文本
-        textPaint.color = Color.WHITE
-        canvas.drawText(
-            currentTimeText,
-            centerX,
-            textBgTop + dp16,
-            textPaint,
-        )
-
-        // 底部小三角形指示器
-        val trianglePath = android.graphics.Path()
-        val triangleSize = dp6
-        trianglePath.moveTo(centerX - triangleSize / 2, textBgRect.bottom)
-        trianglePath.lineTo(centerX + triangleSize / 2, textBgRect.bottom)
-        trianglePath.lineTo(centerX, textBgRect.bottom + triangleSize)
-        trianglePath.close()
-
-        cursorPaint.color = cursorColor
-        cursorPaint.style = Paint.Style.FILL
-        canvas.drawPath(trianglePath, cursorPaint)
-
         canvas.restore()
     }
 
@@ -595,6 +564,9 @@ class KeyFrameTimelineView @JvmOverloads constructor(
             -> {
                 if (isDraggingCursor) {
                     isDraggingCursor = false
+                }
+                if (isDraggingKeyFrame) {
+                    isDraggingKeyFrame = false
                 }
                 // 取消之前的 runnable
                 resetInteractionRunnable?.let { removeCallbacks(it) }
@@ -662,10 +634,7 @@ class KeyFrameTimelineView @JvmOverloads constructor(
         val drawHeight = height - paddingTop - paddingBottom
         val centerY = drawHeight / 2f + paddingTop
 
-        // 关键帧的触摸半径（比绘制的半径稍大，便于触摸）
-        val keyFrameTouchRadius = dp24
-
-        // 检查是否触摸到某个关键帧
+        // 检查是否触摸到某个关键帧（使用类字段 keyFrameTouchRadius）
         for (timeMs in keyFrames) {
             val ratio = timeMs / durationMs
             val drawX = paddingLeft + trackPadding + ratio * trackWidth
@@ -681,8 +650,41 @@ class KeyFrameTimelineView @JvmOverloads constructor(
         }
     }
 
+    /**
+     * 查找触摸位置附近的关键帧
+     * @param x 触摸点的屏幕 x 坐标
+     * @param y 触摸点的屏幕 y 坐标
+     * @return 关键帧时间（毫秒），如果未找到则返回 null
+     */
+    private fun findKeyFrameAtPosition(x: Float, y: Float): Long? {
+        val adapter = adapter ?: return null
+        val keyFrames = adapter.getKeyFrames()
+        if (keyFrames.isEmpty()) return null
+
+        val durationMs = adapter.getDuration().toFloat()
+        if (durationMs <= 0) return null
+
+        val drawHeight = height - paddingTop - paddingBottom
+        val centerY = drawHeight / 2f + paddingTop
+
+        for (timeMs in keyFrames) {
+            val ratio = timeMs / durationMs
+            val drawX = paddingLeft + trackPadding + ratio * trackWidth
+
+            val distance = sqrt((x - drawX).pow(2) + (y - centerY).pow(2))
+
+            if (distance <= keyFrameTouchRadius) {
+                return timeMs
+            }
+        }
+        return null
+    }
+
     private fun resetInteractionLock() {
         isUserInteracting = false
+        if (!isDraggingKeyFrame && !isDraggingCursor) {
+            // 重置交互锁定时不重置拖拽状态
+        }
     }
 
     // ==================== 公共方法 ====================
@@ -712,6 +714,19 @@ class KeyFrameTimelineView @JvmOverloads constructor(
         cursorX = progress * trackWidth.coerceAtLeast(0f)
         clampCursor()
         invalidate()
+    }
+
+    /**
+     * 选中指定时间的关键帧（高亮并移动光标到该关键帧位置）
+     * @param timeMs 关键帧时间，传 null 取消选中
+     */
+    fun selectKeyFrame(timeMs: Long?) {
+        selectedKeyFrame = timeMs
+        if (timeMs != null) {
+            seekToTime(timeMs)
+        } else {
+            invalidate()
+        }
     }
 
     // ==================== 辅助方法 ====================
@@ -752,10 +767,6 @@ class KeyFrameTimelineView @JvmOverloads constructor(
         return getDefaultBackgroundColor()
     }
 
-    private fun Float.isToRight() = this < 0
-
-    private fun Float.isToLeft() = this > 0
-
     // ==================== 接口定义 ====================
 
     interface TimelineAdapter {
@@ -765,27 +776,22 @@ class KeyFrameTimelineView @JvmOverloads constructor(
         fun onSeekTo(position: Long)
 
         /**
-         * 当光标拖动到时间轴最右侧时调用，用于扩展时间轴长度
-         * @param currentDuration 当前时长
-         * @return 扩展后的新时长，如果不扩展则返回 currentDuration
+         * 点击关键帧圆点时调用
+         * @param keyFrameTime 被点击的关键帧时间
          */
-        fun onTimelineExtensionRequest(currentDuration: Long): Long {
-            return currentDuration
-        }
+        fun onKeyFrameSelected(keyFrameTime: Long) {}
 
         /**
-         * 当光标拖动到时间轴最左侧时调用，用于收缩时间轴长度
-         * @param currentDuration 当前时长
-         * @return 收缩后的新时长，如果不收缩则返回 currentDuration
-         */
-        fun onTimelineContractionRequest(currentDuration: Long): Long {
-            return currentDuration
-        }
-
-        /**
-         * 长按关键帧时调用，用于删除关键帧
+         * 长按关键帧时调用，用于打开编辑面板
          * @param keyFrameTime 被长按的关键帧时间
          */
         fun onKeyFrameLongPress(keyFrameTime: Long) {}
+
+        /**
+         * 拖拽关键帧到新时间位置时调用
+         * @param oldTimeMs 原始时间
+         * @param newTimeMs 新时间
+         */
+        fun onKeyFrameTimeChanged(oldTimeMs: Long, newTimeMs: Long) {}
     }
 }

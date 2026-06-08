@@ -1,152 +1,117 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 时间轴容器（包含按钮行和可展开面板） -->
+<!-- 底部时间轴栏：传输控制 + 时间轴轨道 + 操作按钮 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/key_frame_timeline"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_gravity="top"
+    android:layout_gravity="bottom"
     android:orientation="vertical"
-    android:animateLayoutChanges="true"
+    android:paddingVertical="10dp"
+    android:paddingHorizontal="5dp"
     android:background="@drawable/chapter_nav">
 
-    <!-- 按钮行 -->
+    <!-- Row 1: 传输控制 + 时间轴轨道 + 时间显示 (56dp) -->
     <LinearLayout
         android:id="@+id/timeline_button_row"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="56dp"
         android:orientation="horizontal"
+        android:gravity="center_vertical"
         android:paddingHorizontal="6dp">
 
-        <eu.kanade.tachiyomi.ui.reader.viewer.KeyFrameTimelineView
-            android:id="@+id/key_frame_timeline_body"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1" />
-
+        <!-- 上一个关键帧 -->
         <ImageButton
-            android:id="@+id/play_arrow"
+            android:id="@+id/btn_prev_keyframe"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:layout_gravity="center"
             android:background="?selectableItemBackgroundBorderless"
-            android:contentDescription="@string/next_title"
-            android:padding="@dimen/material_layout_keylines_screen_edge_margin"
+            android:contentDescription="上一个关键帧"
+            android:visibility="visible"
+            app:srcCompat="@drawable/ic_skip_previous_24"
+            app:tint="?actionBarTintColor" />
+
+        <!-- 播放/暂停 -->
+        <ImageButton
+            android:id="@+id/btn_play_pause"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_gravity="center"
+            android:background="?selectableItemBackgroundBorderless"
+            android:contentDescription="播放/暂停"
+            android:visibility="visible"
+            app:srcCompat="@drawable/ic_play_arrow_24dp"
+            app:tint="?actionBarTintColor" />
+
+        <!-- 下一个关键帧 -->
+        <ImageButton
+            android:id="@+id/btn_next_keyframe"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_gravity="center"
+            android:background="?selectableItemBackgroundBorderless"
+            android:contentDescription="下一个关键帧"
             android:visibility="visible"
             app:srcCompat="@drawable/ic_skip_next_24"
             app:tint="?actionBarTintColor" />
 
+        <!-- 时间轴轨道主体 -->
+        <eu.kanade.tachiyomi.ui.reader.viewer.KeyFrameTimelineView
+            android:id="@+id/key_frame_timeline_body"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:paddingTop="10dp"
+            android:layout_weight="1" />
+
+        <!-- 时间显示 -->
+        <TextView
+            android:id="@+id/timeline_time_display"
+            android:layout_width="120dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:gravity="center"
+            android:fontFamily="monospace"
+            android:textColor="?attr/colorOnBackground"
+            android:textSize="11sp"
+            tools:text="30.0/30.0s" />
+    </LinearLayout>
+
+    <!-- Row 2: 操作按钮行 (40dp) -->
+    <LinearLayout
+        android:id="@+id/timeline_action_row"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp">
+
+        <!-- 添加关键帧按钮 -->
         <ImageButton
-            android:id="@+id/add_time_point"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:id="@+id/btn_add_keyframe"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
             android:layout_gravity="center"
             android:background="?selectableItemBackgroundBorderless"
-            android:contentDescription="@string/next_title"
-            android:padding="@dimen/material_layout_keylines_screen_edge_margin"
+            android:contentDescription="添加关键帧"
             android:visibility="visible"
             app:srcCompat="@drawable/ic_add_24dp"
             app:tint="?actionBarTintColor" />
 
-        <ImageButton
-            android:id="@+id/timeline_expand_toggle"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_gravity="center"
-            android:background="?selectableItemBackgroundBorderless"
-            android:contentDescription="Toggle timeline panel"
-            android:padding="@dimen/material_layout_keylines_screen_edge_margin"
-            android:visibility="visible"
-            app:srcCompat="@drawable/ic_expand_less_24dp"
-            app:tint="?actionBarTintColor" />
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- 编辑面板按钮 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_expand_edit"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="编辑面板"
+            android:textSize="12sp" />
     </LinearLayout>
 
-    <!-- 可展开面板 -->
-    <FrameLayout
-        android:id="@+id/timeline_expand_panel"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:visibility="gone"
-        tools:visibility="visible">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingHorizontal="24dp"
-            android:paddingVertical="8dp">
-
-            <!-- 面板标题 -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="时间轴控制面板"
-                android:textColor="?attr/colorOnBackground"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-
-            <!-- 控制按钮区域 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:orientation="horizontal"
-                android:gravity="start">
-
-                <Button
-                    android:id="@+id/timeline_btn_delete_all"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="8dp"
-                    android:text="Delete All"
-                    android:textSize="12sp" />
-
-                <Button
-                    android:id="@+id/timeline_btn_export"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="8dp"
-                    android:text="Export"
-                    android:textSize="12sp" />
-
-                <Button
-                    android:id="@+id/timeline_btn_import"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Import"
-                    android:textSize="12sp" />
-            </LinearLayout>
-
-            <!-- 时间信息显示区域 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:layout_marginBottom="8dp"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-
-                <TextView
-                    android:id="@+id/timeline_duration_info"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:textColor="?attr/colorOnBackground"
-                    android:textSize="11sp"
-                    tools:text="总时间：5s"/>
-
-                <TextView
-                    android:id="@+id/timeline_keyframe_count"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    tools:text="关键帧数量：0"
-                    android:textColor="?attr/colorOnBackground"
-                    android:textSize="11sp" />
-            </LinearLayout>
-        </LinearLayout>
-    </FrameLayout>
 </LinearLayout>

@@ -86,7 +86,7 @@
         app:layout_anchorGravity="bottom|end"
         tools:layout_height="30dp" />
 
-    <!-- 时间轴容器 -->
+    <!-- 时间轴容器 - 锚定在底部导航栏上方 -->
     <include
         android:id="@+id/key_frame_timeline"
         layout="@layout/timeline_layout"
@@ -95,7 +95,8 @@
         android:layout_gravity="top"
         android:layout_marginStart="6dp"
         android:layout_marginEnd="6dp"
-        app:layout_anchor="@id/nav_layout" />
+        app:layout_anchor="@id/nav_layout"
+        app:layout_anchorGravity="top" />
 
     <FrameLayout
         android:id="@+id/nav_layout"

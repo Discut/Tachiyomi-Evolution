@@ -110,11 +110,13 @@ import eu.kanade.tachiyomi.ui.reader.settings.ReaderBottomButton
 import eu.kanade.tachiyomi.ui.reader.settings.ReadingModeType
 import eu.kanade.tachiyomi.ui.reader.settings.TabbedReaderSettingsSheet
 import eu.kanade.tachiyomi.ui.reader.sheet.TagSettingsSheet
+import eu.kanade.tachiyomi.ui.reader.slide.engine.ImageViewState
 import eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationEngine
 import eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationPath
 import eu.kanade.tachiyomi.ui.reader.slide.engine.SlidePageHolder
 import eu.kanade.tachiyomi.ui.reader.slide.engine.isEmpty
 import eu.kanade.tachiyomi.ui.reader.slide.serializer.AnimationSequenceSaveManager
+import eu.kanade.tachiyomi.ui.reader.slide.sheet.KeyframeEditSheet
 import eu.kanade.tachiyomi.ui.reader.viewer.BaseViewer
 import eu.kanade.tachiyomi.ui.reader.viewer.KeyFrameTimelineView
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.L2RPagerViewer
@@ -276,19 +278,24 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         get() =
             currentAnimationEngine?.animationPath
     private val DEFAULT_DURATION = 5000L // 默认时长 5 秒
-    private val EXTENSION_STEP = 10L // 每次扩展增加 10ms
-
-    // 时间轴扩展面板状态
-    private var isTimelinePanelExpanded = false
 
     // 当前页面的图片视图引用（用于获取变换状态）
     private var currentImageView: SubsamplingScaleImageView? = null
     private var currentPageHolder: SlidePageHolder? = null
 
-    // 动画序列保存管理器（
+    // 动画序列保存管理器
     private val animationSaveManager = AnimationSequenceSaveManager(this)
 
     private var loadAnimationJob: Job? = null
+
+    // 关键帧编辑面板引用
+    private var keyframeEditSheet: KeyframeEditSheet? = null
+
+    // 当前选中的关键帧时间
+    private var selectedKeyFrameTimeMs: Long? = null
+
+    // 播放状态
+    private var isPlaying = false
 
     companion object {
 
@@ -464,7 +471,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             indexChapterToShift = savedInstanceState.getLong(SHIFTED_CHAP_INDEX, Long.MIN_VALUE)
                 .takeIf { it != Long.MIN_VALUE }
             binding.readerNav.root.isInvisible = !menuVisible
-            binding.keyFrameTimeline.root.isInvisible = !menuVisible
+            binding.keyFrameTimeline.root.isInvisible = !menuVisible || mode != ReaderMode.GALLERY
         } else {
             binding.readerNav.root.isInvisible = true
             binding.keyFrameTimeline.root.isInvisible = true
@@ -594,211 +601,313 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             }
         }
 
-        binding.keyFrameTimeline.playArrow.setOnClickListener {
-            val path = currentAnimationPath
-            if (path == null) {
-                toast("没有可播放的时间轴")
-                return@setOnClickListener
-            }
-
-            val engine = currentAnimationEngine
-            if (engine != null) {
-                // 有动画引擎：重置并从头播放
-                engine.reset()
-                engine.start()
-            } else {
-                // 无动画引擎：使用当前动画路径创建临时动画引擎并播放
-                currentImageView ?: return@setOnClickListener
-
-                val tempEngine = SlideAnimationEngine(
-                    imageView = currentImageView,
-                    animationPath = path,
-                ).apply {
-                    // 播放完成后，保持最终状态
-                    onAnimationComplete = {
-                        // 不需要额外操作，最后一帧状态已被应用
-                    }
-                }
-
-                tempEngine.start()
-                toast("开始播放: ${path.durationMs / 1000f}s")
-            }
+        // 播放/暂停按钮
+        binding.keyFrameTimeline.btnPlayPause.setOnClickListener {
+            togglePlayPause()
         }
 
-        binding.keyFrameTimeline.addTimePoint.setOnClickListener {
+        // 上一个关键帧
+        binding.keyFrameTimeline.btnPrevKeyframe.setOnClickListener {
+            navigateToPreviousKeyFrame()
+        }
+
+        // 下一个关键帧
+        binding.keyFrameTimeline.btnNextKeyframe.setOnClickListener {
+            navigateToNextKeyFrame()
+        }
+
+        // 添加关键帧
+        binding.keyFrameTimeline.btnAddKeyframe.setOnClickListener {
             addKeyFrameAtCurrentTime()
         }
 
-        // 时间轴扩展面板展开/收起按钮
-        binding.keyFrameTimeline.timelineExpandToggle.setOnClickListener {
-            toggleTimelinePanel()
-        }
-
-        // 面板内的按钮点击事件
-        binding.keyFrameTimeline.timelineBtnDeleteAll.setOnClickListener {
-            deleteAllKeyFrames()
-        }
-
-        binding.keyFrameTimeline.timelineBtnExport.setOnClickListener {
-            exportAnimationSequence()
-        }
-
-        binding.keyFrameTimeline.timelineBtnImport.setOnClickListener {
-            importAnimationSequence()
+        // 编辑面板按钮
+        binding.keyFrameTimeline.btnExpandEdit.setOnClickListener {
+            openKeyframeEditSheet()
         }
     }
 
     /**
-     * 切换时间轴扩展面板的展开/收起状态
+     * 播放/暂停切换
      */
-    private fun toggleTimelinePanel() {
-        val panel = binding.keyFrameTimeline.timelineExpandPanel
-        val toggleBtn = binding.keyFrameTimeline.timelineExpandToggle
-        isTimelinePanelExpanded = !isTimelinePanelExpanded
-
-        if (isTimelinePanelExpanded) {
-            // 展开面板
-            // 先设置面板为可见但高度为 0，避免闪烁
-            panel.visibility = View.VISIBLE
-            panel.alpha = 0f
-
-            // 立即设置高度为 0，防止显示完整内容
-            val layoutParams = panel.layoutParams
-            layoutParams.height = 0
-            panel.layoutParams = layoutParams
-
-            // 在下一个布局帧测量面板的实际高度并开始动画
-            panel.post {
-                // 测量面板的实际高度
-                val widthSpec = android.view.View.MeasureSpec.makeMeasureSpec(panel.width, android.view.View.MeasureSpec.EXACTLY)
-                val heightSpec = android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED)
-                panel.measure(widthSpec, heightSpec)
-                val targetHeight = panel.measuredHeight
-
-                // 使用 ValueAnimator 动画高度从 0 到目标高度
-                val valueAnimator = android.animation.ValueAnimator.ofInt(0, targetHeight)
-                valueAnimator.duration = 300
-                valueAnimator.interpolator = android.view.animation.DecelerateInterpolator()
-                valueAnimator.addUpdateListener { animator ->
-                    val animatedValue = animator.animatedValue as Int
-                    val params = panel.layoutParams
-                    params.height = animatedValue
-                    panel.layoutParams = params
-                    // 同步淡入
-                    panel.alpha = (animatedValue.toFloat() / targetHeight).coerceIn(0f, 1f)
-                }
-                valueAnimator.start()
-            }
-
-            // 更新按钮图标为向上箭头
-            toggleBtn.setImageResource(R.drawable.ic_expand_less_24dp)
-
-            // 更新面板内容
-            updateTimelinePanelContent()
-
-            // 进入幻灯片模式：放宽平移限制 + 启动动画（如果存在）
-            currentAnimationEngine?.apply {
-                relaxPanLimit()
-                if (currentAnimationPath.isEmpty().not() && !isActive()) {
-                    start()
-                }
-            }
-        } else {
-            // 收起面板
-            val currentHeight = panel.height
-
-            // 使用 ValueAnimator 动画高度从当前高度到 0
-            val valueAnimator = android.animation.ValueAnimator.ofInt(currentHeight, 0)
-            valueAnimator.duration = 250
-            valueAnimator.interpolator = android.view.animation.AccelerateInterpolator()
-            valueAnimator.addUpdateListener { animator ->
-                val animatedValue = animator.animatedValue as Int
-                val params = panel.layoutParams
-                params.height = animatedValue
-                panel.layoutParams = params
-                // 同步淡出
-                panel.alpha = (animatedValue.toFloat() / currentHeight).coerceIn(0f, 1f)
-            }
-            valueAnimator.addListener(
-                object : android.animation.Animator.AnimatorListener {
-                    override fun onAnimationStart(animation: android.animation.Animator) {}
-                    override fun onAnimationEnd(animation: android.animation.Animator) {
-                        panel.visibility = View.GONE
-                        // 重置高度为 wrap_content
-                        val params = panel.layoutParams
-                        params.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-                        panel.layoutParams = params
-                        panel.alpha = 1f
-                    }
-                    override fun onAnimationCancel(animation: android.animation.Animator) {}
-                    override fun onAnimationRepeat(animation: android.animation.Animator) {}
-                },
-            )
-            valueAnimator.start()
-
-            // 更新按钮图标为向下箭头
-            toggleBtn.setImageResource(R.drawable.ic_expand_more_24dp)
-
-            // 退出幻灯片模式：停止动画 + 恢复平移限制，图片回弹填满屏幕
-            currentAnimationEngine?.apply {
-                if (isActive()) stop()
-                restorePanLimit()
-            }
-        }
-    }
-
-    /**
-     * 更新时间轴扩展面板的内容
-     */
-    private fun updateTimelinePanelContent() {
-        val path = currentAnimationPath
-        val duration = path?.durationMs ?: 0L
-        val keyFrameCount = path?.keyFrames?.size ?: 0
-
-        binding.keyFrameTimeline.timelineDurationInfo.text = "总时间：${duration / 1000f}s"
-        binding.keyFrameTimeline.timelineKeyframeCount.text = "关键帧数量： $keyFrameCount"
-    }
-
-    /**
-     * 删除所有关键帧
-     */
-    private fun deleteAllKeyFrames() {
-        val path = currentAnimationPath ?: run {
-            toast("No animation sequence to delete")
+    private fun togglePlayPause() {
+        val engine = currentAnimationEngine ?: run {
+            toast("动画引擎未初始化")
             return
         }
 
-        currentAnimationEngine?.animationPath = path.copy(keyFrames = emptyList())
+        if (isPlaying) {
+            // 暂停
+            engine.pause()
+            isPlaying = false
+            binding.keyFrameTimeline.btnPlayPause.setImageResource(R.drawable.ic_play_arrow_24dp)
+        } else {
+            // 播放
+            val path = currentAnimationPath
+            if (path == null || path.keyFrames.isEmpty()) {
+                toast("没有关键帧，无法播放")
+                return
+            }
 
-        // 同步到保存管理器并标记为已修改
+            // 首次播放时放宽平移限制
+            engine.relaxPanLimit()
+
+            if (engine.elapsedTime >= path.durationMs) {
+                // 如果已到结尾，重置后从头播放
+                engine.stop()
+                engine.elapsedTime = 0L
+            }
+
+            // 如果引擎处于暂停状态（isRunning=true，但帧回调已移除），调用 resume
+            if (engine.isActive()) {
+                engine.resume()
+            } else {
+                engine.start()
+            }
+
+            isPlaying = true
+            binding.keyFrameTimeline.btnPlayPause.setImageResource(R.drawable.ic_pause_24dp)
+        }
+    }
+
+    /**
+     * 导航到上一个关键帧
+     */
+    private fun navigateToPreviousKeyFrame() {
+        val path = currentAnimationPath ?: return
+        val engine = currentAnimationEngine ?: return
+        if (path.keyFrames.isEmpty()) return
+
+        val keyFrames = path.keyFrames.map { it.timeMs }.sorted()
+        val currentTime = engine.elapsedTime
+
+        val prevTime = keyFrames.lastOrNull { it < currentTime - 100 }
+            ?: keyFrames.first()
+
+        engine.elapsedTime = prevTime
+        engine.reCalculateStateAndApply()
+        binding.keyFrameTimeline.keyFrameTimelineBody.seekToTime(prevTime)
+        binding.keyFrameTimeline.keyFrameTimelineBody.selectKeyFrame(prevTime)
+        selectedKeyFrameTimeMs = prevTime
+        updateTimeDisplay()
+        updateKeyframeEditSheetIfOpen(prevTime)
+    }
+
+    /**
+     * 导航到下一个关键帧
+     */
+    private fun navigateToNextKeyFrame() {
+        val path = currentAnimationPath ?: return
+        val engine = currentAnimationEngine ?: return
+        if (path.keyFrames.isEmpty()) return
+
+        val keyFrames = path.keyFrames.map { it.timeMs }.sorted()
+        val currentTime = engine.elapsedTime
+
+        val nextTime = keyFrames.firstOrNull { it > currentTime + 100 }
+            ?: keyFrames.last()
+
+        engine.elapsedTime = nextTime
+        engine.reCalculateStateAndApply()
+        binding.keyFrameTimeline.keyFrameTimelineBody.seekToTime(nextTime)
+        binding.keyFrameTimeline.keyFrameTimelineBody.selectKeyFrame(nextTime)
+        selectedKeyFrameTimeMs = nextTime
+        updateTimeDisplay()
+        updateKeyframeEditSheetIfOpen(nextTime)
+    }
+
+    /**
+     * 打开关键帧编辑面板 (BottomSheet)
+     */
+    private fun openKeyframeEditSheet() {
+        val path = currentAnimationPath ?: run {
+            toast("时间轴未初始化")
+            return
+        }
+        if (path.keyFrames.isEmpty()) {
+            toast("没有关键帧可编辑")
+            return
+        }
+
+        val selectedTime = selectedKeyFrameTimeMs ?: path.keyFrames.first().timeMs
+        val keyFrame = path.keyFrames.firstOrNull { it.timeMs == selectedTime }
+            ?: path.keyFrames.first()
+
+        keyframeEditSheet = KeyframeEditSheet(
+            activity = this,
+            initialKeyFrameTimeMs = keyFrame.timeMs,
+            initialImageViewState = keyFrame.state,
+            animationPath = path,
+            onPropertyChanged = { timeMs, newState ->
+                updateKeyFrameState(timeMs, newState)
+            },
+            onDeleteRequested = { timeMs ->
+                deleteKeyFrameWithUndo(timeMs)
+            },
+            onDuplicateRequested = { timeMs ->
+                duplicateKeyFrame(timeMs)
+            },
+            onDurationChanged = { newDurationMs ->
+                updateAnimationDuration(newDurationMs)
+            },
+            onCatchRequested = { timeMs ->
+                catchStateOfImageToKeyFrame(timeMs)
+            },
+        ).apply {
+            show()
+        }
+    }
+
+    /**
+     * 更新关键帧状态（实时预览）
+     */
+    private fun updateKeyFrameState(timeMs: Long, newState: ImageViewState) {
+        val path = currentAnimationPath ?: return
+        val newKeyFrames = path.keyFrames.map {
+            if (it.timeMs == timeMs) eu.kanade.tachiyomi.ui.reader.slide.engine.KeyFrame(timeMs, newState) else it
+        }
+
+        val newPath = path.copy(keyFrames = newKeyFrames)
+        currentAnimationEngine?.let {
+            it.animationPath = newPath
+            it.applyState(newState)
+        }
+        currentPageHolder?.animationPath = newPath
+        syncAnimationToSaveManager()
+    }
+
+    /**
+     * 删除关键帧（带撤销）
+     */
+    private fun deleteKeyFrameWithUndo(timeMs: Long) {
+        val path = currentAnimationPath ?: return
+        val originalKeyFrames = path.keyFrames.toList()
+
+        val newKeyFrames = originalKeyFrames.filter { it.timeMs != timeMs }
+        if (newKeyFrames.size == originalKeyFrames.size) {
+            toast("关键帧不存在")
+            return
+        }
+
+        val newPath = path.copy(keyFrames = newKeyFrames)
+        currentAnimationEngine?.animationPath = newPath
+        currentPageHolder?.animationPath = newPath
+        syncAnimationToSaveManager()
+        binding.keyFrameTimeline.keyFrameTimelineBody.invalidate()
+        binding.keyFrameTimeline.keyFrameTimelineBody.selectKeyFrame(null)
+        selectedKeyFrameTimeMs = null
+        updateTimeDisplay()
+
+        // 显示撤销 Snackbar
+        Snackbar.make(binding.root, "已删除关键帧: ${timeMs / 1000f}s", Snackbar.LENGTH_LONG)
+            .setAction("撤销") {
+                // 恢复原始关键帧列表
+                val restoredPath = path.copy(keyFrames = originalKeyFrames)
+                currentAnimationEngine?.animationPath = restoredPath
+                currentPageHolder?.animationPath = restoredPath
+                syncAnimationToSaveManager()
+                binding.keyFrameTimeline.keyFrameTimelineBody.invalidate()
+                binding.keyFrameTimeline.keyFrameTimelineBody.selectKeyFrame(timeMs)
+                selectedKeyFrameTimeMs = timeMs
+                updateTimeDisplay()
+            }
+            .show()
+    }
+
+    /**
+     * 捕获当前图片状态作为关键帧
+     */
+    private fun catchStateOfImageToKeyFrame(timeMs: Long) {
+        val imageView = currentImageView
+        if (imageView == null || !imageView.isReady) {
+            toast("图片未准备好")
+            return
+        }
+
+        currentAnimationPath ?: run {
+            toast("时间轴未初始化")
+            return
+        }
+
+        updateKeyFrameState(timeMs, getImageViewState(imageView))
+        toast("已捕获当前图片状态")
+    }
+
+    /**
+     * 复制关键帧
+     */
+    private fun duplicateKeyFrame(timeMs: Long) {
+        val path = currentAnimationPath ?: return
+        val keyFrame = path.keyFrames.firstOrNull { it.timeMs == timeMs } ?: return
+
+        val newTimeMs = (timeMs + 500).coerceAtMost(path.durationMs)
+
+        path.keyFrames.find { it.timeMs == newTimeMs } ?: run {
+            toast("已存在相同时间点的关键帧")
+            return
+        }
+
+        val newKeyFrame = eu.kanade.tachiyomi.ui.reader.slide.engine.KeyFrame(newTimeMs, keyFrame.state)
+        val newKeyFrames = (path.keyFrames + newKeyFrame).sortedBy { it.timeMs }
+
+        val newPath = path.copy(keyFrames = newKeyFrames)
+        currentAnimationEngine?.animationPath = newPath
+        currentPageHolder?.animationPath = newPath
+        syncAnimationToSaveManager()
+        binding.keyFrameTimeline.keyFrameTimelineBody.invalidate()
+
+        toast("已复制关键帧到: ${newTimeMs / 1000f}s")
+    }
+
+    /**
+     * 更新动画总时长
+     */
+    private fun updateAnimationDuration(newDurationMs: Long) {
+        val path = currentAnimationPath ?: return
+        val lastKeyFrameTime = path.keyFrames.maxOfOrNull { it.timeMs } ?: 0L
+        val clamped = newDurationMs.coerceIn(lastKeyFrameTime.coerceAtLeast(1000L), 60000L)
+
+        val newPath = path.copy(durationMs = clamped)
+        currentAnimationEngine?.animationPath = newPath
+        currentPageHolder?.animationPath = newPath
+        syncAnimationToSaveManager()
+        binding.keyFrameTimeline.keyFrameTimelineBody.invalidate()
+        updateTimeDisplay()
+    }
+
+    /**
+     * 同步动画数据到保存管理器
+     */
+    private fun syncAnimationToSaveManager() {
         currentAnimationPath?.let {
             animationSaveManager.setCurrentAnimation(animationSaveManager.getCurrentImageId(), it)
         }
         animationSaveManager.markAsDirty()
-
-        // 刷新时间轴显示
-        binding.keyFrameTimeline.keyFrameTimelineBody.invalidate()
-
-        // 更新面板内容
-        updateTimelinePanelContent()
-
-        toast("All keyframes deleted")
     }
 
     /**
-     * 导出动画序列
+     * 更新时间显示
      */
-    private fun exportAnimationSequence() {
-        // TODO: 实现导出功能
-        toast("Export feature coming soon")
+    private fun updateTimeDisplay() {
+        val currentTime = currentAnimationEngine?.elapsedTime ?: 0L
+        val duration = currentAnimationPath?.durationMs ?: DEFAULT_DURATION
+        binding.keyFrameTimeline.timelineTimeDisplay.text = "${(currentTime.toFloat() / 1000f).format(1)}/${(duration.toFloat() / 1000f).format(1)}s"
     }
 
+    private fun Float.format(digits: Int): String = "%.${digits}f".format(this)
+
     /**
-     * 导入动画序列
+     * 如果编辑面板已打开，更新其显示的关键帧
      */
-    private fun importAnimationSequence() {
-        // TODO: 实现导入功能
-        toast("Import feature coming soon")
+    private fun updateKeyframeEditSheetIfOpen(newTimeMs: Long) {
+        val sheet = keyframeEditSheet ?: return
+        if (!sheet.isShowing) {
+            keyframeEditSheet = null
+            return
+        }
+        val path = currentAnimationPath ?: return
+        val keyFrame = path.keyFrames.firstOrNull { it.timeMs == newTimeMs } ?: return
+        sheet.updateKeyFrameTime(newTimeMs, keyFrame.state)
     }
 
     /**
@@ -851,63 +960,13 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         // 刷新时间轴显示
         binding.keyFrameTimeline.keyFrameTimelineBody.invalidate()
 
-        // 同步到保存管理器并标记为已修改
-        currentAnimationPath?.let {
-            animationSaveManager.setCurrentAnimation(animationSaveManager.getCurrentImageId(), it)
-        }
-        animationSaveManager.markAsDirty()
-
-        // 更新面板内容
-        updateTimelinePanelContent()
+        // 同步到保存管理器
+        syncAnimationToSaveManager()
 
         // 刷新图片视图，显示当前时间点的插值状态
         currentAnimationEngine?.reCalculateStateAndApply()
 
-        toast("已合并关键帧: ${currentTime / 1000f}s")
-    }
-
-    /**
-     * 删除指定时间的关键帧
-     * @param keyFrameTime 要删除的关键帧时间
-     */
-    private fun deleteKeyFrame(keyFrameTime: Long) {
-        val path = currentAnimationPath ?: run {
-            toast("时间轴未初始化")
-            return
-        }
-
-        // 检查关键帧是否存在
-        val existingFrameIndex = path.keyFrames.indexOfFirst { it.timeMs == keyFrameTime }
-        if (existingFrameIndex == -1) {
-            toast("关键帧不存在")
-            return
-        }
-
-        // 从关键帧列表中移除
-        val newKeyFrames = path.keyFrames.toMutableList()
-        newKeyFrames.removeAt(existingFrameIndex)
-
-        // 更新当前动画路径
-        currentAnimationEngine?.animationPath = path.copy(keyFrames = newKeyFrames)
-
-        // 更新页面的 animationPath 引用（这样页面切换时数据会保留）
-        currentAnimationPath?.apply {
-            currentPageHolder?.animationPath = this
-        }
-
-        // 刷新时间轴显示
-        binding.keyFrameTimeline.keyFrameTimelineBody.invalidate()
-
-        // 同步到保存管理器并标记为已修改
-        currentAnimationPath?.let {
-            animationSaveManager.setCurrentAnimation(animationSaveManager.getCurrentImageId(), it)
-        }
-        animationSaveManager.markAsDirty()
-
-        // 更新面板内容
-        updateTimelinePanelContent()
-
-        toast("已删除关键帧: ${keyFrameTime / 1000f}s")
+        toast("已添加关键帧: ${currentTime / 1000f}s")
     }
 
     /**
@@ -1857,6 +1916,10 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                     loadAnimationJob?.cancel("Launch new job")
 
                     loadAnimationJob = scope.launchIO {
+                        // 停止引擎并重置播放位置
+                        engine.stop()
+                        engine.elapsedTime = 0L
+
                         // 加载该图片已保存的动画序列（如果存在）
                         animationSaveManager.load(imageId)?.let {
                             currentAnimationEngine?.animationPath = it
@@ -1878,87 +1941,90 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                             binding.keyFrameTimeline.keyFrameTimelineBody.adapter = object : KeyFrameTimelineView.TimelineAdapter {
                                 override fun getDuration() = currentAnimationPath?.durationMs ?: DEFAULT_DURATION
 
-                                override fun getCurrentPosition() = 0L // 统一模式下没有播放进度
+                                override fun getCurrentPosition() = currentAnimationEngine?.elapsedTime ?: 0L
 
                                 override fun getKeyFrames() = currentAnimationPath?.keyFrames?.map { it.timeMs } ?: listOf()
 
                                 override fun onSeekTo(position: Long) {
-                                    // 只更新图片状态，不播放动画
+                                    // 更新图片状态 + 光标
                                     currentAnimationEngine?.apply {
+                                        this.elapsedTime = position
                                         this.animationPath.getStateAtTime(position)
                                             .apply(this::applyState)
                                     }
+                                    // 自动选中最近的关键帧
+                                    val nearestKeyFrame = currentAnimationPath?.keyFrames
+                                        ?.map { it.timeMs }
+                                        ?.minByOrNull { kotlin.math.abs(it - position) }
+                                        ?.takeIf { kotlin.math.abs(it - position) < 100 }
+                                    selectedKeyFrameTimeMs = nearestKeyFrame
+                                    binding.keyFrameTimeline.keyFrameTimelineBody.selectKeyFrame(nearestKeyFrame)
+                                    updateTimeDisplay()
+                                    updateKeyframeEditSheetIfOpen(nearestKeyFrame ?: return)
                                 }
 
-                                override fun onTimelineExtensionRequest(currentDuration: Long): Long {
-                                    // 时间轴扩展，每次增加EXTENSION_STEP
-                                    val newDuration = currentDuration + EXTENSION_STEP
-
-                                    // 更新当前动画路径的时长
-                                    currentAnimationPath?.apply {
-                                        currentAnimationEngine?.animationPath = copy(durationMs = if (newDuration >= 10000L) 10000L else newDuration)
+                                override fun onKeyFrameSelected(keyFrameTime: Long) {
+                                    selectedKeyFrameTimeMs = keyFrameTime
+                                    currentAnimationEngine?.apply {
+                                        this.elapsedTime = keyFrameTime
+                                        this.animationPath.getStateAtTime(keyFrameTime)
+                                            .apply(this::applyState)
                                     }
-
-                                    // 同步到保存管理器并标记为已修改
-                                    currentAnimationPath?.let {
-                                        animationSaveManager.setCurrentAnimation(animationSaveManager.getCurrentImageId(), it)
-                                    }
-                                    animationSaveManager.markAsDirty()
-
-                                    // 更新面板内容
-                                    updateTimelinePanelContent()
-
-                                    return newDuration
-                                }
-
-                                override fun onTimelineContractionRequest(currentDuration: Long): Long {
-                                    // 时间轴收缩，每次减少EXTENSION_STEP
-                                    val newDuration = currentDuration - EXTENSION_STEP
-
-                                    // 更新当前动画路径的时长
-                                    currentAnimationPath?.apply {
-                                        currentAnimationEngine?.animationPath = copy(
-                                            durationMs = if (keyFrames.isNotEmpty() && newDuration <= keyFrames.last().timeMs) {
-                                                keyFrames.last().timeMs
-                                            } else if (newDuration <= AnimationSequenceSaveManager.MINI_TIME_INTERVAL) {
-                                                AnimationSequenceSaveManager.MINI_TIME_INTERVAL
-                                            } else {
-                                                newDuration
-                                            },
-                                        )
-                                    }
-
-                                    // 同步到保存管理器并标记为已修改
-                                    currentAnimationPath?.let {
-                                        animationSaveManager.setCurrentAnimation(animationSaveManager.getCurrentImageId(), it)
-                                    }
-                                    animationSaveManager.markAsDirty()
-
-                                    // 更新面板内容
-                                    updateTimelinePanelContent()
-
-                                    return newDuration
+                                    updateTimeDisplay()
+                                    updateKeyframeEditSheetIfOpen(keyFrameTime)
                                 }
 
                                 override fun onKeyFrameLongPress(keyFrameTime: Long) {
-                                    deleteKeyFrame(keyFrameTime)
-                                    engine.reCalculateStateAndApply()
+                                    // 长按关键帧直接打开编辑面板
+                                    selectedKeyFrameTimeMs = keyFrameTime
+                                    openKeyframeEditSheet()
                                 }
-                            }
-                            // 有动画时，保持原有的帧更新回调
-                            engine.onFrameUpdate = { elapsedTimeMs ->
-                                val now = System.currentTimeMillis()
-                                // 节流：每 50ms 更新一次时间轴（20fps）
-                                if (now - lastTimelineUpdateTime >= TIMELINE_UPDATE_INTERVAL_MS) {
-                                    lastTimelineUpdateTime = now
-                                    binding.keyFrameTimeline.keyFrameTimelineBody.seekToTime(elapsedTimeMs)
+
+                                override fun onKeyFrameTimeChanged(oldTimeMs: Long, newTimeMs: Long) {
+                                    // 拖拽关键帧到新时间位置
+                                    val path = currentAnimationPath ?: return
+                                    val newKeyFrames = path.keyFrames.map {
+                                        if (it.timeMs == oldTimeMs) {
+                                            eu.kanade.tachiyomi.ui.reader.slide.engine.KeyFrame(newTimeMs, it.state)
+                                        } else {
+                                            it
+                                        }
+                                    }.sortedBy { it.timeMs }
+
+                                    val newPath = path.copy(keyFrames = newKeyFrames)
+                                    currentAnimationEngine?.animationPath = newPath
+                                    currentPageHolder?.animationPath = newPath
+                                    syncAnimationToSaveManager()
+                                    binding.keyFrameTimeline.keyFrameTimelineBody.invalidate()
+                                    selectedKeyFrameTimeMs = newTimeMs
+                                    updateTimeDisplay()
+                                    updateKeyframeEditSheetIfOpen(newTimeMs)
                                 }
                             }
 
-                            // 面板展开时自动播放
-                            if (currentAnimationPath.isEmpty().not() && isTimelinePanelExpanded) {
-                                engine.start()
+                            // 帧更新回调（播放时同步时间轴）
+                            engine.onFrameUpdate = { elapsedTimeMs ->
+                                val now = System.currentTimeMillis()
+                                if (now - lastTimelineUpdateTime >= TIMELINE_UPDATE_INTERVAL_MS) {
+                                    lastTimelineUpdateTime = now
+                                    binding.keyFrameTimeline.keyFrameTimelineBody.seekToTime(elapsedTimeMs)
+                                    updateTimeDisplay()
+                                }
+
+                                // 动画播放完成时恢复播放按钮图标
+                                val path = currentAnimationPath
+                                if (path != null && elapsedTimeMs >= path.durationMs) {
+                                    isPlaying = false
+                                    binding.keyFrameTimeline.btnPlayPause.setImageResource(R.drawable.ic_play_arrow_24dp)
+                                }
                             }
+
+                            // 页面切换时重置播放器状态到 0s
+                            isPlaying = false
+                            binding.keyFrameTimeline.btnPlayPause.setImageResource(R.drawable.ic_play_arrow_24dp)
+                            binding.keyFrameTimeline.keyFrameTimelineBody.seekToTime(0L)
+                            selectedKeyFrameTimeMs = null
+                            updateTimeDisplay()
                         }
                     }
                 }
@@ -2067,7 +2133,12 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             binding.chaptersSheet.root.sheetBehavior.isCollapsed() -> View.VISIBLE
             else -> View.INVISIBLE
         }
-        binding.keyFrameTimeline.root.visibility = binding.readerNav.root.visibility
+        // 时间轴只在画廊模式下显示，且与导航栏保持一致的可见性
+        binding.keyFrameTimeline.root.visibility = if (mode == ReaderMode.GALLERY) {
+            binding.readerNav.root.visibility
+        } else {
+            View.GONE
+        }
         if (lastShiftDoubleState == null) {
             manuallyShiftedPages = false
         }
