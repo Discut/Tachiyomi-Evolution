@@ -736,7 +736,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             path.keyFrames.getOrNull(index) ?: path.keyFrames.first()
         }
 
-        android.util.Log.d(TAG, "openKeyframeEditSheet: index=$index, timeMs=${keyFrame.timeMs}")
+        Timber.d("openKeyframeEditSheet: index=$index, timeMs=${keyFrame.timeMs}")
 
         keyframeEditSheet = KeyframeEditSheet(
             activity = this,
@@ -806,7 +806,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         selectedKeyFrameIndex = null
         updateTimeDisplay()
 
-        android.util.Log.d(TAG, "deleted keyframe[$index] at ${deletedFrame.timeMs}ms")
+        Timber.d(TAG, "deleted keyframe[$index] at ${deletedFrame.timeMs}ms")
 
         // 显示撤销 Snackbar
         Snackbar.make(binding.root, "已删除关键帧: ${deletedFrame.timeMs / 1000f}s", Snackbar.LENGTH_LONG)
@@ -866,7 +866,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         syncAnimationToSaveManager()
         binding.keyFrameTimeline.keyFrameTimelineBody.invalidate()
 
-        android.util.Log.d(TAG, "duplicated keyframe from ${timeMs}ms to ${newTimeMs}ms")
+        Timber.d( "duplicated keyframe from ${timeMs}ms to ${newTimeMs}ms")
         toast("已复制关键帧到: ${newTimeMs / 1000f}s")
     }
 

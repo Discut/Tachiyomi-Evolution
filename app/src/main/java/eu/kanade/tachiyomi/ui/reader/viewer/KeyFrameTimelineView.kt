@@ -17,6 +17,7 @@ import androidx.core.graphics.toColorInt
 import androidx.core.view.ViewCompat
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.ui.reader.slide.engine.KeyFrame
+import timber.log.Timber
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.pow
@@ -291,7 +292,7 @@ class KeyFrameTimelineView @JvmOverloads constructor(
                                 abs(other.timeMs - virtualTimeMs) < COLLISION_THRESHOLD_MS
                         }
                         if (collides) {
-                            android.util.Log.d(TAG, "keyframe collision, virtualTime=$virtualTimeMs frozen, keys=${keyFrames.map { it.timeMs }}")
+                            Timber.d( "keyframe collision, virtualTime=$virtualTimeMs frozen, keys=${keyFrames.map { it.timeMs }}")
                             ViewCompat.postInvalidateOnAnimation(this@KeyFrameTimelineView)
                             return true
                         }
@@ -329,7 +330,7 @@ class KeyFrameTimelineView @JvmOverloads constructor(
                                 startRawX = e2.x,
                             )
                             touchedSelectedKeyFrame = false
-                            android.util.Log.d(TAG, "start dragging keyframe at ${kfTimeMs}ms, startRawX=${e2.x}")
+                            Timber.d( "start dragging keyframe at ${kfTimeMs}ms, startRawX=${e2.x}")
                             return true
                         }
 
