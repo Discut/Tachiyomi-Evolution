@@ -11,6 +11,7 @@ import eu.kanade.tachiyomi.data.orm.dao.DiffGroupImageDao
 import eu.kanade.tachiyomi.data.orm.dao.ImageAndTagDao
 import eu.kanade.tachiyomi.data.orm.dao.ImageDao
 import eu.kanade.tachiyomi.data.orm.dao.TagDao
+import eu.kanade.tachiyomi.data.orm.dao.TagFilterDao
 import eu.kanade.tachiyomi.data.orm.dao.TagTypeDao
 import eu.kanade.tachiyomi.data.orm.migrations.migrationObjets
 import eu.kanade.tachiyomi.data.orm.models.AnimationSequence
@@ -20,6 +21,7 @@ import eu.kanade.tachiyomi.data.orm.models.DBDiffGroupImage
 import eu.kanade.tachiyomi.data.orm.models.DBImage
 import eu.kanade.tachiyomi.data.orm.models.DBImageAndTag
 import eu.kanade.tachiyomi.data.orm.models.DBTag
+import eu.kanade.tachiyomi.data.orm.models.DBTagFilter
 import eu.kanade.tachiyomi.data.orm.models.DBTagType
 import timber.log.Timber
 import java.util.concurrent.Executors
@@ -33,8 +35,9 @@ import java.util.concurrent.Executors
         DBTag::class,
         DBTagType::class,
         DBDiffGroupImage::class,
+        DBTagFilter::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 @TypeConverters(BigDecimalConverter::class)
@@ -51,6 +54,8 @@ abstract class GalleryDatabase : RoomDatabase() {
     abstract fun getImageAndTagDao(): ImageAndTagDao
 
     abstract fun getDiffGroupDao(): DiffGroupImageDao
+
+    abstract fun getTagFilterDao(): TagFilterDao
 
     companion object {
         // 数据库初始化配置

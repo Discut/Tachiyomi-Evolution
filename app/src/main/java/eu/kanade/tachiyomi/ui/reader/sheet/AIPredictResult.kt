@@ -4,6 +4,7 @@ data class AIPredictResult(
     val tagName: String,
     val score: Float,
     val isAdopted: Boolean = false,
+    val isFiltered: Boolean = false,
 )
 
-enum class AIPredictState { IDLE, LOADING, RESULTS, EMPTY, ERROR }
+enum class AIPredictState { IDLE, LOADING, REFRESHING, RESULTS, EMPTY, ERROR }

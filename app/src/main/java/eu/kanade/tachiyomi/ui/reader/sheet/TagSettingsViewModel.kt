@@ -3,6 +3,9 @@ package eu.kanade.tachiyomi.ui.reader.sheet
 import android.app.Activity
 import android.graphics.BitmapFactory
 import eu.kanade.tachiyomi.data.gallery.GalleryManager
+import eu.kanade.tachiyomi.data.orm.GalleryDatabase
+import eu.kanade.tachiyomi.data.orm.dao.TagFilterDao
+import eu.kanade.tachiyomi.data.orm.models.DBTagFilter
 import eu.kanade.tachiyomi.data.orm.models.DBTagType.PresetType
 import eu.kanade.tachiyomi.data.tagger.WDTagger
 import eu.kanade.tachiyomi.model.IImageBo
@@ -16,6 +19,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import uy.kohesive.injekt.injectLazy
 
 class TagSettingsViewModel(
@@ -25,6 +29,8 @@ class TagSettingsViewModel(
     val scope = CoroutineScope(Job() + Dispatchers.IO)
     private val galleryManager by injectLazy<GalleryManager>()
     private val wdTagger by injectLazy<WDTagger>()
+    private val galleryDatabase by injectLazy<GalleryDatabase>()
+    private val tagFilterDao: TagFilterDao get() = galleryDatabase.getTagFilterDao()
 
     private val searchKeyFlow = MutableStateFlow("")
 
@@ -38,6 +44,10 @@ class TagSettingsViewModel(
     // AI 打标状态
     val aiPredictState = MutableStateFlow(AIPredictState.IDLE)
     val aiPredictResults = MutableStateFlow<List<AIPredictResult>>(emptyList())
+
+    // AI tag filter: full results (with isFiltered markers) + show/hide toggle
+    val aiAllPredictResults = MutableStateFlow<List<AIPredictResult>>(emptyList())
+    val showFiltered = MutableStateFlow(false)
 
     companion object {
         val PLUS_TAG = TagVo(
@@ -75,7 +85,8 @@ class TagSettingsViewModel(
      * 触发 AI 打标推理
      */
     suspend fun predictTags(filePath: String) {
-        aiPredictState.value = AIPredictState.LOADING
+        val hasExistingResults = aiAllPredictResults.value.isNotEmpty()
+        aiPredictState.value = if (hasExistingResults) AIPredictState.REFRESHING else AIPredictState.LOADING
         try {
             // 获取当前图片已关联的标签名集合（用于默认采纳判断）
             val existingTagNames = galleryManager.getAllTagsByImageId(imageBO.id)
@@ -89,16 +100,21 @@ class TagSettingsViewModel(
             bitmap.recycle()
 
             if (predictions.isEmpty()) {
+                aiAllPredictResults.value = emptyList()
                 aiPredictResults.value = emptyList()
                 aiPredictState.value = AIPredictState.EMPTY
             } else {
-                aiPredictResults.value = predictions.map { (name, score) ->
+                val filterNames = tagFilterDao.getAll().map { it.tagName }.toSet()
+                val allResults = predictions.map { (name, score) ->
                     AIPredictResult(
                         tagName = name,
                         score = score,
                         isAdopted = name.lowercase() in existingTagNames,
+                        isFiltered = name in filterNames,
                     )
                 }
+                aiAllPredictResults.value = allResults
+                recomputeAiPredictResults()
                 aiPredictState.value = AIPredictState.RESULTS
             }
         } catch (e: Exception) {
@@ -140,6 +156,50 @@ class TagSettingsViewModel(
         if (index >= 0) {
             currentResults[index] = result.copy(isAdopted = true)
             aiPredictResults.value = currentResults
+        }
+    }
+
+    fun recomputeAiPredictResults() {
+        aiPredictResults.value = if (showFiltered.value) {
+            aiAllPredictResults.value
+        } else {
+            aiAllPredictResults.value.filter { !it.isFiltered || it.isAdopted }
+        }
+    }
+
+    fun addFilter(tagName: String) {
+        val list = aiAllPredictResults.value.toMutableList()
+        val idx = list.indexOfFirst { it.tagName == tagName }
+        if (idx >= 0 && !list[idx].isAdopted) {
+            list[idx] = list[idx].copy(isFiltered = true)
+            aiAllPredictResults.value = list
+            recomputeAiPredictResults()
+        }
+        scope.launch {
+            tagFilterDao.insert(DBTagFilter(tagName = tagName))
+        }
+    }
+
+    fun removeFilter(tagName: String) {
+        val list = aiAllPredictResults.value.toMutableList()
+        val idx = list.indexOfFirst { it.tagName == tagName }
+        if (idx >= 0) {
+            list[idx] = list[idx].copy(isFiltered = false)
+            aiAllPredictResults.value = list
+            recomputeAiPredictResults()
+        }
+        scope.launch {
+            tagFilterDao.deleteByName(tagName)
+        }
+    }
+
+    fun updateAdoptionState(tagName: String, isAdopted: Boolean) {
+        val list = aiAllPredictResults.value.toMutableList()
+        val idx = list.indexOfFirst { it.tagName.equals(tagName, ignoreCase = true) }
+        if (idx >= 0) {
+            list[idx] = list[idx].copy(isAdopted = isAdopted)
+            aiAllPredictResults.value = list
+            recomputeAiPredictResults()
         }
     }
 

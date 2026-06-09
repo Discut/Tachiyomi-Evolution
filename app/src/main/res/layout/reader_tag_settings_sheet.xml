@@ -50,24 +50,55 @@
                     android:layout_height="wrap_content" />
 
             </com.google.android.material.textfield.TextInputLayout>
-
             <!-- AI 智能打标区域 -->
-            <Button
-                android:id="@+id/ai_tag_button"
+            <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="AI智能打标"
-                style="@style/Widget.Material3.Button.TonalButton" />
+                android:layout_height="wrap_content">
 
-            <ProgressBar
-                android:id="@+id/ai_loading_progress"
-                style="?android:attr/progressBarStyleHorizontal"
+                <Button
+                    android:id="@+id/ai_tag_button"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="AI智能打标"
+                    style="@style/Widget.Material3.Button.TonalButton" />
+
+                <ProgressBar
+                    android:id="@+id/ai_loading_progress"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:layout_marginEnd="16dp"
+                    android:indeterminate="true"
+                    android:visibility="gone"
+                    tools:visibility="visible"/>
+            </FrameLayout>
+
+            <!-- AI 标签统计 + 过滤切换 -->
+            <LinearLayout
+                android:id="@+id/ai_tag_stats_layout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:indeterminate="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingVertical="8dp"
                 android:visibility="gone"
-                tools:visibility="visible"/>
+                tools:visibility="visible">
+
+                <TextView
+                    android:id="@+id/ai_tag_stats_text"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    tools:text="共识别 15 个标签，已过滤 3 个" />
+
+                <Button
+                    android:id="@+id/ai_filter_toggle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="显示已过滤"
+                    style="@style/Widget.Material3.Button.TextButton" />
+            </LinearLayout>
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/ai_tag_results_recycler"

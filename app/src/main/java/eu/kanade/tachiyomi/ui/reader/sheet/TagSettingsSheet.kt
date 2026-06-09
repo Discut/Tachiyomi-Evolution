@@ -9,6 +9,7 @@ import android.view.ActionMode
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
+import android.view.MotionEvent
 import android.view.View
 import android.view.animation.OvershootInterpolator
 import androidx.appcompat.app.AlertDialog
@@ -54,6 +55,18 @@ class TagSettingsSheet(
     val binding: ReaderTagSettingsSheetBinding by lazy { createBinding(activity.layoutInflater) }
 
     private var floatingActionMode: ActionMode? = null
+    private var floatingActionModeAnchor: View? = null
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.action == MotionEvent.ACTION_DOWN &&
+            floatingActionMode != null &&
+            floatingActionModeAnchor != null
+        ) {
+            finishFloatingActionMode()
+            return false
+        }
+        return super.dispatchTouchEvent(ev)
+    }
 
     private fun createBinding(inflater: LayoutInflater): ReaderTagSettingsSheetBinding {
         return ReaderTagSettingsSheetBinding.inflate(inflater)
@@ -127,6 +140,7 @@ class TagSettingsSheet(
             return
         }
 
+        floatingActionModeAnchor = view
         floatingActionMode =
             view.startActionMode(
                 FloatingImageTagActionModeCallback(tagVo, view),
@@ -148,13 +162,19 @@ class TagSettingsSheet(
 
             !tagVo.isSelected -> {
                 if (imageBO is ImageBO) {
-                    scope.launchIO { viewModel.relatedImageAndTag(imageBO, tagVo) }
+                    scope.launchIO {
+                        viewModel.relatedImageAndTag(imageBO, tagVo)
+                        viewModel.updateAdoptionState(tagVo.tagValue, true)
+                    }
                 }
             }
 
             tagVo.isSelected -> {
                 if (imageBO is ImageBO) {
-                    scope.launchIO { viewModel.unrelatedImageAndTag(imageBO, tagVo) }
+                    scope.launchIO {
+                        viewModel.unrelatedImageAndTag(imageBO, tagVo)
+                        viewModel.updateAdoptionState(tagVo.tagValue, false)
+                    }
                 }
             }
         }
@@ -195,11 +215,16 @@ class TagSettingsSheet(
     // ========== AI 智能打标 ==========
 
     private val aiTagAdapter by lazy {
-        AITagResultAdapter { result ->
-            scope.launchIO {
-                viewModel.adoptAITag(result)
-            }
-        }
+        AITagResultAdapter(
+            tagClickedListener = { result ->
+                scope.launchIO {
+                    viewModel.adoptAITag(result)
+                }
+            },
+            tagLongClickListener = { result, view ->
+                showAITagActionMode(result, view)
+            },
+        )
     }
 
     private fun setupAITagging() {
@@ -239,6 +264,12 @@ class TagSettingsSheet(
                     AIPredictState.LOADING -> {
                         showAILoading()
                         binding.aiTagButton.isEnabled = false
+                        binding.aiTagStatsLayout.visibility = View.GONE
+                    }
+
+                    AIPredictState.REFRESHING -> {
+                        binding.aiLoadingProgress.visibility = View.VISIBLE
+                        binding.aiTagButton.isEnabled = false
                     }
 
                     AIPredictState.RESULTS -> {
@@ -259,9 +290,46 @@ class TagSettingsSheet(
                     }
 
                     AIPredictState.IDLE -> { // no-op
+                        binding.aiTagStatsLayout.visibility = View.GONE
                     }
                 }
             }
+        }
+
+        // 持续观察 aiPredictResults 变化（过滤/取消过滤/采纳状态同步）
+        scope.launch {
+            viewModel.aiPredictResults.collectLatest { results ->
+                if (viewModel.aiPredictState.value == AIPredictState.RESULTS ||
+                    viewModel.aiPredictState.value == AIPredictState.REFRESHING
+                ) {
+                    aiTagAdapter.submitList(results)
+                    updateAIStats()
+                }
+            }
+        }
+
+        // Observe all results for stats count
+        scope.launch {
+            viewModel.aiAllPredictResults.collectLatest { all ->
+                updateAIStats()
+            }
+        }
+
+        // Observe showFiltered toggle for button text
+        scope.launch {
+            viewModel.showFiltered.collectLatest { showing ->
+                binding.aiFilterToggle.text = if (showing) {
+                    "隐藏已过滤"
+                } else {
+                    "显示已过滤"
+                }
+            }
+        }
+
+        binding.aiFilterToggle.setOnClickListener {
+            viewModel.showFiltered.value = !viewModel.showFiltered.value
+            viewModel.recomputeAiPredictResults()
+            aiTagAdapter.submitList(viewModel.aiPredictResults.value.toList())
         }
     }
 
@@ -276,6 +344,16 @@ class TagSettingsSheet(
         binding.aiTagButton.isEnabled = true
         binding.aiTagResultsRecycler.visibility = View.VISIBLE
         aiTagAdapter.submitList(results.toList())
+        updateAIStats()
+    }
+
+    private fun updateAIStats() {
+        val all = viewModel.aiAllPredictResults.value
+        if (all.isEmpty()) return
+        val total = all.size
+        val filtered = all.count { it.isFiltered }
+        binding.aiTagStatsText.text = "共识别 $total 个标签，已过滤 $filtered 个"
+        binding.aiTagStatsLayout.visibility = View.VISIBLE
     }
 
     private fun onAITagClicked(result: AIPredictResult, itemBinding: ItemAiTagResultBinding) {
@@ -299,6 +377,54 @@ class TagSettingsSheet(
         floatingActionMode ?: return
         floatingActionMode?.finish()
         floatingActionMode = null
+        floatingActionModeAnchor = null
+    }
+
+    private fun showAITagActionMode(result: AIPredictResult, view: View) {
+        finishFloatingActionMode()
+        floatingActionModeAnchor = view
+        floatingActionMode = view.startActionMode(
+            AITagFilterActionModeCallback(result),
+            ActionMode.TYPE_FLOATING,
+        )
+    }
+
+    inner class AITagFilterActionModeCallback(
+        private val result: AIPredictResult,
+    ) : ActionMode.Callback {
+
+        override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+            mode?.menuInflater?.inflate(R.menu.ai_tag_filter_actions, menu)
+            menu?.findItem(R.id.action_filter)?.isVisible = !result.isFiltered && !result.isAdopted
+            menu?.findItem(R.id.action_unfilter)?.isVisible = result.isFiltered
+            return true
+        }
+
+        override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean = false
+
+        override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
+            when (item?.itemId) {
+                R.id.action_filter -> {
+                    scope.launchIO {
+                        viewModel.addFilter(result.tagName)
+                    }
+                }
+                R.id.action_unfilter -> {
+                    scope.launchIO {
+                        viewModel.removeFilter(result.tagName)
+                    }
+                }
+                R.id.action_copy_tag_name -> {
+                    copyToClipboard(result.tagName, result.tagName, true, binding.root)
+                }
+            }
+            mode?.finish()
+            return true
+        }
+
+        override fun onDestroyActionMode(mode: ActionMode?) {
+            floatingActionMode = null
+        }
     }
 
     inner class FloatingImageTagActionModeCallback(

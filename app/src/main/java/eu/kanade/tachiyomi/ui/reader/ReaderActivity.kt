@@ -866,7 +866,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         syncAnimationToSaveManager()
         binding.keyFrameTimeline.keyFrameTimelineBody.invalidate()
 
-        Timber.d( "duplicated keyframe from ${timeMs}ms to ${newTimeMs}ms")
+        Timber.d("duplicated keyframe from ${timeMs}ms to ${newTimeMs}ms")
         toast("已复制关键帧到: ${newTimeMs / 1000f}s")
     }
 

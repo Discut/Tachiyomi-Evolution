@@ -292,7 +292,7 @@ class KeyFrameTimelineView @JvmOverloads constructor(
                                 abs(other.timeMs - virtualTimeMs) < COLLISION_THRESHOLD_MS
                         }
                         if (collides) {
-                            Timber.d( "keyframe collision, virtualTime=$virtualTimeMs frozen, keys=${keyFrames.map { it.timeMs }}")
+                            Timber.d("keyframe collision, virtualTime=$virtualTimeMs frozen, keys=${keyFrames.map { it.timeMs }}")
                             ViewCompat.postInvalidateOnAnimation(this@KeyFrameTimelineView)
                             return true
                         }
@@ -330,7 +330,7 @@ class KeyFrameTimelineView @JvmOverloads constructor(
                                 startRawX = e2.x,
                             )
                             touchedSelectedKeyFrame = false
-                            Timber.d( "start dragging keyframe at ${kfTimeMs}ms, startRawX=${e2.x}")
+                            Timber.d("start dragging keyframe at ${kfTimeMs}ms, startRawX=${e2.x}")
                             return true
                         }
 

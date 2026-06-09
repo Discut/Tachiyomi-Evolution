@@ -1089,4 +1089,16 @@
     <string name="cannot_split">不能拆分，未选中差分组</string>
     <string name="tag_settings">标签设置</string>
     <string name="ai_tags_filter">Ai标签过滤器</string>
+
+    <!-- AI Tag Filter -->
+    <string name="ai_tag_filter_settings">AI标签过滤</string>
+    <string name="ai_tag_filter_summary">已过滤 %d 个标签</string>
+    <string name="ai_tag_filtered_suffix">（已过滤）</string>
+    <string name="ai_tag_filter_add_hint">输入要过滤的标签名</string>
+    <string name="ai_tag_filter_search_hint">搜索过滤标签</string>
+    <string name="ai_tag_filter_empty">暂无过滤标签</string>
+    <string name="ai_tag_filter_action_filter">过滤</string>
+    <string name="ai_tag_filter_action_unfilter">取消过滤</string>
+    <string name="_add">添加</string>
+    <string name="_copy_to_clipboard">复制到剪贴板</string>
 </resources>

@@ -76,4 +76,19 @@ val migrationObjets = listOf(
             )
         }
     },
+
+    // 版本 6 -> 7: 新增 AI 标签过滤表
+    object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS ai_tag_filters (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    tag_name TEXT NOT NULL UNIQUE,
+                    created_at INTEGER NOT NULL DEFAULT 0
+                )
+                """.trimIndent(),
+            )
+        }
+    },
 )

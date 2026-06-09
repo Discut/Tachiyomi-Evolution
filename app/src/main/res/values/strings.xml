@@ -1235,15 +1235,16 @@
     <string name="tag_settings">Tag Settings</string>
     <string name="ai_tags_filter">Filter for ai tags</string>
 
-
-
-
-
-
-
-
-
-
-
+    <!-- AI Tag Filter -->
+    <string name="ai_tag_filter_settings">AI Tag Filter</string>
+    <string name="ai_tag_filter_summary">Filtered %d tags</string>
+    <string name="ai_tag_filtered_suffix"> (filtered)</string>
+    <string name="ai_tag_filter_add_hint">Enter tag name to filter</string>
+    <string name="ai_tag_filter_search_hint">Search filtered tags</string>
+    <string name="ai_tag_filter_empty">No filtered tags</string>
+    <string name="ai_tag_filter_action_filter">Filter</string>
+    <string name="ai_tag_filter_action_unfilter">Remove filter</string>
+    <string name="_add">Add</string>
+    <string name="_copy_to_clipboard">Copy to clipboard</string>
 
 </resources>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/action_filter"
+        android:title="@string/ai_tag_filter_action_filter" />
+    <item
+        android:id="@+id/action_unfilter"
+        android:title="@string/ai_tag_filter_action_unfilter" />
+    <item
+        android:id="@+id/action_copy_tag_name"
+        android:title="@string/_copy_to_clipboard" />
+</menu>

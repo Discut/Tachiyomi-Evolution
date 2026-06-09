@@ -7,11 +7,14 @@ import android.database.Cursor
 import android.net.Uri
 import android.provider.MediaStore
 import androidx.appcompat.app.AppCompatActivity
+import androidx.preference.Preference
 import androidx.preference.PreferenceScreen
 import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.gallery.BackupResult
 import eu.kanade.tachiyomi.data.gallery.GalleryManager
+import eu.kanade.tachiyomi.data.orm.GalleryDatabase
+import eu.kanade.tachiyomi.ui.setting.gallery.AiTagFilterDialog
 import eu.kanade.tachiyomi.ui.setting.gallery.GalleryDirSettingsDialog
 import eu.kanade.tachiyomi.ui.setting.gallery.RecoveryGalleryDataDialog
 import eu.kanade.tachiyomi.util.cancelOldJob
@@ -29,6 +32,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import uy.kohesive.injekt.injectLazy
 
@@ -37,6 +41,7 @@ class SettingsGalleryController : SettingsController() {
     private var _dirFlow: MutableStateFlow<Dir> = MutableStateFlow(EMPTY_DIR)
 
     private val galleryManager: GalleryManager by injectLazy()
+    private val galleryDatabase: GalleryDatabase by injectLazy()
 
     private var backupJob: Job? = null
     private var backupParesJob: Job? = null
@@ -140,7 +145,20 @@ class SettingsGalleryController : SettingsController() {
 
             preference {
                 key = "gallery_tag_filter"
+                titleRes = R.string.ai_tag_filter_settings
+                summaryRes = R.string.ai_tag_filter_summary
 
+                onClick {
+                    showAITagFilterDialog()
+                }
+            }
+
+            // Flow-driven summary update
+            viewScope.launch {
+                galleryDatabase.getTagFilterDao().getAllAsFlow().collect { list ->
+                    findPreference<Preference>("gallery_tag_filter")?.summary =
+                        activity?.getString(R.string.ai_tag_filter_summary, list.size)
+                }
             }
         }
 
@@ -162,6 +180,17 @@ class SettingsGalleryController : SettingsController() {
                 onClick {
                     pickBackupFile()
                 }
+            }
+        }
+    }
+
+    private fun showAITagFilterDialog() {
+        val context = activity ?: return
+        (context as? AppCompatActivity)?.apply {
+            AiTagFilterDialog(
+                dao = galleryDatabase.getTagFilterDao(),
+            ).apply {
+                show(supportFragmentManager, "aiTagFilter")
             }
         }
     }
