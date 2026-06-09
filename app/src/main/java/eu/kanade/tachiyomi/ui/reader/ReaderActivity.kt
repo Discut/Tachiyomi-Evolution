@@ -111,6 +111,7 @@ import eu.kanade.tachiyomi.ui.reader.settings.ReadingModeType
 import eu.kanade.tachiyomi.ui.reader.settings.TabbedReaderSettingsSheet
 import eu.kanade.tachiyomi.ui.reader.sheet.TagSettingsSheet
 import eu.kanade.tachiyomi.ui.reader.slide.engine.ImageViewState
+import eu.kanade.tachiyomi.ui.reader.slide.engine.KeyFrame
 import eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationEngine
 import eu.kanade.tachiyomi.ui.reader.slide.engine.SlideAnimationPath
 import eu.kanade.tachiyomi.ui.reader.slide.engine.SlidePageHolder
@@ -291,13 +292,14 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
     // 关键帧编辑面板引用
     private var keyframeEditSheet: KeyframeEditSheet? = null
 
-    // 当前选中的关键帧时间
-    private var selectedKeyFrameTimeMs: Long? = null
+    // 当前选中的关键帧 index
+    private var selectedKeyFrameIndex: Int? = null
 
     // 播放状态
     private var isPlaying = false
 
     companion object {
+        private const val TAG = "ReaderActivity"
 
         const val SHIFT_DOUBLE_PAGES = "shiftingDoublePages"
         const val SHIFTED_PAGE_INDEX = "shiftedPageIndex"
@@ -678,19 +680,20 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         val engine = currentAnimationEngine ?: return
         if (path.keyFrames.isEmpty()) return
 
-        val keyFrames = path.keyFrames.map { it.timeMs }.sorted()
+        val keyFrames = path.keyFrames.sortedBy { it.timeMs }
         val currentTime = engine.elapsedTime
 
-        val prevTime = keyFrames.lastOrNull { it < currentTime - 100 }
-            ?: keyFrames.first()
+        val prevIndex = keyFrames.indexOfLast { it.timeMs < currentTime - 100 }
+            .takeIf { it >= 0 } ?: 0
+        val prevTime = keyFrames[prevIndex].timeMs
 
         engine.elapsedTime = prevTime
         engine.reCalculateStateAndApply()
         binding.keyFrameTimeline.keyFrameTimelineBody.seekToTime(prevTime)
         binding.keyFrameTimeline.keyFrameTimelineBody.selectKeyFrame(prevTime)
-        selectedKeyFrameTimeMs = prevTime
+        selectedKeyFrameIndex = prevIndex
         updateTimeDisplay()
-        updateKeyframeEditSheetIfOpen(prevTime)
+        updateKeyframeEditSheetIfOpen(prevIndex)
     }
 
     /**
@@ -701,19 +704,20 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         val engine = currentAnimationEngine ?: return
         if (path.keyFrames.isEmpty()) return
 
-        val keyFrames = path.keyFrames.map { it.timeMs }.sorted()
+        val keyFrames = path.keyFrames.sortedBy { it.timeMs }
         val currentTime = engine.elapsedTime
 
-        val nextTime = keyFrames.firstOrNull { it > currentTime + 100 }
-            ?: keyFrames.last()
+        val nextIndex = keyFrames.indexOfFirst { it.timeMs > currentTime + 100 }
+            .takeIf { it >= 0 } ?: (keyFrames.size - 1)
+        val nextTime = keyFrames[nextIndex].timeMs
 
         engine.elapsedTime = nextTime
         engine.reCalculateStateAndApply()
         binding.keyFrameTimeline.keyFrameTimelineBody.seekToTime(nextTime)
         binding.keyFrameTimeline.keyFrameTimelineBody.selectKeyFrame(nextTime)
-        selectedKeyFrameTimeMs = nextTime
+        selectedKeyFrameIndex = nextIndex
         updateTimeDisplay()
-        updateKeyframeEditSheetIfOpen(nextTime)
+        updateKeyframeEditSheetIfOpen(nextIndex)
     }
 
     /**
@@ -724,20 +728,22 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
             toast("时间轴未初始化")
             return
         }
-        if (path.keyFrames.isEmpty()) {
-            toast("没有关键帧可编辑")
-            return
+        val isEmpty = path.keyFrames.isEmpty()
+        val index = selectedKeyFrameIndex ?: 0
+        val keyFrame = if (isEmpty) {
+            KeyFrame.default()
+        } else {
+            path.keyFrames.getOrNull(index) ?: path.keyFrames.first()
         }
 
-        val selectedTime = selectedKeyFrameTimeMs ?: path.keyFrames.first().timeMs
-        val keyFrame = path.keyFrames.firstOrNull { it.timeMs == selectedTime }
-            ?: path.keyFrames.first()
+        android.util.Log.d(TAG, "openKeyframeEditSheet: index=$index, timeMs=${keyFrame.timeMs}")
 
         keyframeEditSheet = KeyframeEditSheet(
             activity = this,
             initialKeyFrameTimeMs = keyFrame.timeMs,
             initialImageViewState = keyFrame.state,
             animationPath = path,
+            isEmptyKeyFrames = isEmpty,
             onPropertyChanged = { timeMs, newState ->
                 updateKeyFrameState(timeMs, newState)
             },
@@ -782,12 +788,14 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
     private fun deleteKeyFrameWithUndo(timeMs: Long) {
         val path = currentAnimationPath ?: return
         val originalKeyFrames = path.keyFrames.toList()
-
-        val newKeyFrames = originalKeyFrames.filter { it.timeMs != timeMs }
-        if (newKeyFrames.size == originalKeyFrames.size) {
+        val index = originalKeyFrames.indexOfFirst { it.timeMs == timeMs }
+        if (index == -1) {
             toast("关键帧不存在")
             return
         }
+
+        val deletedFrame = originalKeyFrames[index]
+        val newKeyFrames = originalKeyFrames.toMutableList().apply { removeAt(index) }
 
         val newPath = path.copy(keyFrames = newKeyFrames)
         currentAnimationEngine?.animationPath = newPath
@@ -795,20 +803,21 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         syncAnimationToSaveManager()
         binding.keyFrameTimeline.keyFrameTimelineBody.invalidate()
         binding.keyFrameTimeline.keyFrameTimelineBody.selectKeyFrame(null)
-        selectedKeyFrameTimeMs = null
+        selectedKeyFrameIndex = null
         updateTimeDisplay()
 
+        android.util.Log.d(TAG, "deleted keyframe[$index] at ${deletedFrame.timeMs}ms")
+
         // 显示撤销 Snackbar
-        Snackbar.make(binding.root, "已删除关键帧: ${timeMs / 1000f}s", Snackbar.LENGTH_LONG)
+        Snackbar.make(binding.root, "已删除关键帧: ${deletedFrame.timeMs / 1000f}s", Snackbar.LENGTH_LONG)
             .setAction("撤销") {
-                // 恢复原始关键帧列表
                 val restoredPath = path.copy(keyFrames = originalKeyFrames)
                 currentAnimationEngine?.animationPath = restoredPath
                 currentPageHolder?.animationPath = restoredPath
                 syncAnimationToSaveManager()
                 binding.keyFrameTimeline.keyFrameTimelineBody.invalidate()
-                binding.keyFrameTimeline.keyFrameTimelineBody.selectKeyFrame(timeMs)
-                selectedKeyFrameTimeMs = timeMs
+                binding.keyFrameTimeline.keyFrameTimelineBody.selectKeyFrame(deletedFrame.timeMs)
+                selectedKeyFrameIndex = index
                 updateTimeDisplay()
             }
             .show()
@@ -842,7 +851,8 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
 
         val newTimeMs = (timeMs + 500).coerceAtMost(path.durationMs)
 
-        path.keyFrames.find { it.timeMs == newTimeMs } ?: run {
+        // 修复：原逻辑反了，find 返回 null 时反而报"已存在"
+        path.keyFrames.find { it.timeMs == newTimeMs }?.let {
             toast("已存在相同时间点的关键帧")
             return
         }
@@ -856,6 +866,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
         syncAnimationToSaveManager()
         binding.keyFrameTimeline.keyFrameTimelineBody.invalidate()
 
+        android.util.Log.d(TAG, "duplicated keyframe from ${timeMs}ms to ${newTimeMs}ms")
         toast("已复制关键帧到: ${newTimeMs / 1000f}s")
     }
 
@@ -899,15 +910,15 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
     /**
      * 如果编辑面板已打开，更新其显示的关键帧
      */
-    private fun updateKeyframeEditSheetIfOpen(newTimeMs: Long) {
+    private fun updateKeyframeEditSheetIfOpen(index: Int) {
         val sheet = keyframeEditSheet ?: return
         if (!sheet.isShowing) {
             keyframeEditSheet = null
             return
         }
         val path = currentAnimationPath ?: return
-        val keyFrame = path.keyFrames.firstOrNull { it.timeMs == newTimeMs } ?: return
-        sheet.updateKeyFrameTime(newTimeMs, keyFrame.state)
+        val keyFrame = path.keyFrames.getOrNull(index) ?: return
+        sheet.updateKeyFrameTime(keyFrame.timeMs, keyFrame.state)
     }
 
     /**
@@ -1943,62 +1954,77 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
 
                                 override fun getCurrentPosition() = currentAnimationEngine?.elapsedTime ?: 0L
 
-                                override fun getKeyFrames() = currentAnimationPath?.keyFrames?.map { it.timeMs } ?: listOf()
+                                override fun getKeyFrames() = currentAnimationPath?.keyFrames ?: listOf()
 
                                 override fun onSeekTo(position: Long) {
-                                    // 更新图片状态 + 光标
                                     currentAnimationEngine?.apply {
                                         this.elapsedTime = position
                                         this.animationPath.getStateAtTime(position)
                                             .apply(this::applyState)
                                     }
                                     // 自动选中最近的关键帧
-                                    val nearestKeyFrame = currentAnimationPath?.keyFrames
-                                        ?.map { it.timeMs }
-                                        ?.minByOrNull { kotlin.math.abs(it - position) }
-                                        ?.takeIf { kotlin.math.abs(it - position) < 100 }
-                                    selectedKeyFrameTimeMs = nearestKeyFrame
-                                    binding.keyFrameTimeline.keyFrameTimelineBody.selectKeyFrame(nearestKeyFrame)
+                                    val keyFrames = currentAnimationPath?.keyFrames ?: return
+                                    val nearestIndex = keyFrames.indices
+                                        .minByOrNull { kotlin.math.abs(keyFrames[it].timeMs - position) }
+                                        ?.takeIf { kotlin.math.abs(keyFrames[it].timeMs - position) < 100 }
+                                    selectedKeyFrameIndex = nearestIndex
+                                    binding.keyFrameTimeline.keyFrameTimelineBody.selectKeyFrame(
+                                        nearestIndex?.let { keyFrames[it].timeMs },
+                                    )
                                     updateTimeDisplay()
-                                    updateKeyframeEditSheetIfOpen(nearestKeyFrame ?: return)
+                                    if (nearestIndex != null) updateKeyframeEditSheetIfOpen(nearestIndex)
                                 }
 
-                                override fun onKeyFrameSelected(keyFrameTime: Long) {
-                                    selectedKeyFrameTimeMs = keyFrameTime
+                                override fun onKeyFrameSelected(index: Int) {
+                                    val keyFrames = currentAnimationPath?.keyFrames ?: return
+                                    val keyFrame = keyFrames.getOrNull(index) ?: return
+                                    selectedKeyFrameIndex = index
                                     currentAnimationEngine?.apply {
-                                        this.elapsedTime = keyFrameTime
-                                        this.animationPath.getStateAtTime(keyFrameTime)
+                                        this.elapsedTime = keyFrame.timeMs
+                                        this.animationPath.getStateAtTime(keyFrame.timeMs)
                                             .apply(this::applyState)
                                     }
                                     updateTimeDisplay()
-                                    updateKeyframeEditSheetIfOpen(keyFrameTime)
+                                    updateKeyframeEditSheetIfOpen(index)
                                 }
 
-                                override fun onKeyFrameLongPress(keyFrameTime: Long) {
-                                    // 长按关键帧直接打开编辑面板
-                                    selectedKeyFrameTimeMs = keyFrameTime
+                                override fun onKeyFrameLongPress(index: Int) {
+                                    selectedKeyFrameIndex = index
                                     openKeyframeEditSheet()
                                 }
 
-                                override fun onKeyFrameTimeChanged(oldTimeMs: Long, newTimeMs: Long) {
-                                    // 拖拽关键帧到新时间位置
+                                override fun onKeyFrameTimeChanged(index: Int, newTimeMs: Long) {
                                     val path = currentAnimationPath ?: return
-                                    val newKeyFrames = path.keyFrames.map {
-                                        if (it.timeMs == oldTimeMs) {
-                                            eu.kanade.tachiyomi.ui.reader.slide.engine.KeyFrame(newTimeMs, it.state)
-                                        } else {
-                                            it
-                                        }
-                                    }.sortedBy { it.timeMs }
+                                    val oldFrame = path.keyFrames.getOrNull(index) ?: return
+                                    val newKeyFrames = path.keyFrames.toMutableList()
+                                    newKeyFrames[index] = eu.kanade.tachiyomi.ui.reader.slide.engine.KeyFrame(newTimeMs, oldFrame.state)
+                                    newKeyFrames.sortBy { it.timeMs }
 
                                     val newPath = path.copy(keyFrames = newKeyFrames)
                                     currentAnimationEngine?.animationPath = newPath
                                     currentPageHolder?.animationPath = newPath
                                     syncAnimationToSaveManager()
                                     binding.keyFrameTimeline.keyFrameTimelineBody.invalidate()
-                                    selectedKeyFrameTimeMs = newTimeMs
+
+                                    // 排序后 index 可能变化，重新查找
+                                    val newIndex = newKeyFrames.indexOfFirst { it.timeMs == newTimeMs }
+                                    selectedKeyFrameIndex = newIndex
                                     updateTimeDisplay()
-                                    updateKeyframeEditSheetIfOpen(newTimeMs)
+                                    if (newIndex >= 0) updateKeyframeEditSheetIfOpen(newIndex)
+                                    onKeyFrameTouchSelected(newIndex)
+                                }
+
+                                override fun onKeyFrameTouchSelected(index: Int?) {
+                                    val tv = binding.keyFrameTimeline.tvSelectedKeyframe
+                                    if (index != null) {
+                                        val keyFrame = currentAnimationPath?.keyFrames?.getOrNull(index)
+                                        if (keyFrame != null) {
+                                            tv.text = "已选中: ${(keyFrame.timeMs / 1000f).format(1)}s"
+                                            tv.visibility = android.view.View.VISIBLE
+                                        }
+                                    } else {
+                                        tv.visibility = android.view.View.GONE
+                                    }
                                 }
                             }
 
@@ -2023,7 +2049,7 @@ class ReaderActivity : BaseActivity<ReaderActivityBinding>() {
                             isPlaying = false
                             binding.keyFrameTimeline.btnPlayPause.setImageResource(R.drawable.ic_play_arrow_24dp)
                             binding.keyFrameTimeline.keyFrameTimelineBody.seekToTime(0L)
-                            selectedKeyFrameTimeMs = null
+                            selectedKeyFrameIndex = null
                             updateTimeDisplay()
                         }
                     }

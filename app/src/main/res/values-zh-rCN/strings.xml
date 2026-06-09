@@ -1087,4 +1087,6 @@
     <string name="merge">合并</string>
     <string name="cannot_merge">不能合并，选中的图片不相似</string>
     <string name="cannot_split">不能拆分，未选中差分组</string>
+    <string name="tag_settings">标签设置</string>
+    <string name="ai_tags_filter">Ai标签过滤器</string>
 </resources>

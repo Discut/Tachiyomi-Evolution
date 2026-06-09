@@ -99,6 +99,18 @@
             app:srcCompat="@drawable/ic_add_24dp"
             app:tint="?actionBarTintColor" />
 
+        <!-- 选中关键帧状态显示 -->
+        <TextView
+            android:id="@+id/tv_selected_keyframe"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:textColor="?attr/colorOnBackground"
+            android:textSize="11sp"
+            android:visibility="gone"
+            tools:text="已选中: 2.5s"
+            tools:visibility="visible" />
+
         <View
             android:layout_width="0dp"
             android:layout_height="0dp"

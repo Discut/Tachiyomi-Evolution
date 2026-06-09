@@ -96,7 +96,12 @@ fun SlideAnimationPath?.isEmpty(): Boolean {
 data class KeyFrame(
     val timeMs: Long,
     val state: ImageViewState,
-)
+) {
+    companion object {
+        fun default() =
+            KeyFrame(0L, ImageViewState.default())
+    }
+}
 
 /**
  * 扩展函数：创建放大缩小的关键帧路径

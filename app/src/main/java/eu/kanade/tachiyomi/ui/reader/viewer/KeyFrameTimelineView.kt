@@ -16,6 +16,7 @@ import androidx.core.content.res.use
 import androidx.core.graphics.toColorInt
 import androidx.core.view.ViewCompat
 import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.ui.reader.slide.engine.KeyFrame
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.pow
@@ -50,7 +51,6 @@ class KeyFrameTimelineView @JvmOverloads constructor(
     private var keyFrameColor: Int
     private var keyFrameSelectedColor: Int
     private var textColor: Int
-    private var timeTextColor: Int
     private var backgroundColor: Int = 0
 
     // 布局参数
@@ -71,9 +71,32 @@ class KeyFrameTimelineView @JvmOverloads constructor(
     private val sp14: Float
 
     // 关键帧选中状态
-    private var selectedKeyFrame: Long? = null
+    private var selectedKeyFrameIndex: Int? = null
 
-    // 滚动状态 - 改为基于光标位置而非滚动偏移
+    companion object {
+        private const val TAG = "KeyFrameTimeline"
+        private const val COLLISION_THRESHOLD_MS = 100L
+        private const val INTERACTION_COOLDOWN_MS = 500L
+    }
+
+    // ==================== 触摸状态机 ====================
+
+    private var touchState: TouchState = TouchState.Idle
+
+    private sealed class TouchState {
+        object Idle : TouchState()
+        object DraggingCursor : TouchState()
+        data class DraggingKeyFrame(
+            val timeMs: Long, // 当前关键帧时间（用于排序后重定位，会随拖动更新）
+            val startTimeMs: Long, // 拖动起点时间（固定不变，计算 virtualTimeMs 的基准）
+            val startRawX: Float, // 手指起点 x 坐标（固定不变）
+        ) : TouchState()
+    }
+
+    private var isUserInteracting = false // 交互锁：阻止 seekToTime 在交互/冷却期内更新光标
+    private var touchedSelectedKeyFrame = false // onDown→onScroll 过渡标记
+
+    // 光标位置
     private var cursorX: Float = 0f // 光标在轨道上的相对位置 (0 ~ trackWidth)
     private val minCursorX: Float get() = 0f
     private val maxCursorX: Float get() = trackWidth
@@ -84,19 +107,11 @@ class KeyFrameTimelineView @JvmOverloads constructor(
     // 记录上一次的内容宽度，用于尺寸变化时保持相对进度
     private var prevTrackWidth: Float = 0f
 
-    // 用户交互锁定标志
-    private var isUserInteracting = false
-    private var lastInteractionTime = 0L
-    private val INTERACTION_COOLDOWN_MS = 500L
+    // 交互冷却
     private var resetInteractionRunnable: Runnable? = null
 
-    // 光标拖动状态
-    private var isDraggingCursor = false
+    // 光标触摸半径
     private var cursorTouchRadius = 0f
-
-    // 关键帧拖动状态
-    private var isDraggingKeyFrame = false
-    private var draggedKeyFrameOriginalTime: Long = 0L
 
     // 查找关键帧的触摸半径（延迟初始化，因为 dp24 在 init 中计算）
     private val keyFrameTouchRadius: Float
@@ -192,8 +207,6 @@ class KeyFrameTimelineView @JvmOverloads constructor(
             Color.WHITE
         }
 
-        timeTextColor = textColor
-
         // 转换 dp/sp 到 px
         dp2 = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 2f, resources.displayMetrics)
         dp3 = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 3f, resources.displayMetrics)
@@ -230,30 +243,21 @@ class KeyFrameTimelineView @JvmOverloads constructor(
         context,
         object : GestureDetector.SimpleOnGestureListener() {
             override fun onDown(e: MotionEvent): Boolean {
-                // 优先检查是否触摸到关键帧
-                val hitFrame = findKeyFrameAtPosition(e.x, e.y)
-                if (hitFrame != null) {
-                    isDraggingKeyFrame = true
-                    draggedKeyFrameOriginalTime = hitFrame
-                    isUserInteracting = true
-                    lastInteractionTime = System.currentTimeMillis()
-                    return true
-                }
+                isUserInteracting = true
 
-                // 检查是否点击了光标区域
+                // 记录手指是否按在已选中的关键帧上（不改变选中状态）
+                val hitIndex = findKeyFrameAtPosition(e.x, e.y)
+                touchedSelectedKeyFrame = hitIndex != null && hitIndex == selectedKeyFrameIndex
+
+                // 检查是否点击了光标区域，预判可能的光标拖动
                 val drawHeight = height - paddingTop - paddingBottom
                 val centerY = drawHeight / 2f + paddingTop
-
                 val currentCursorScreenX = paddingLeft + trackPadding + cursorX
                 val distanceToCursor = sqrt(
                     (e.x - currentCursorScreenX).pow(2) + (e.y - centerY).pow(2),
                 )
-
                 if (distanceToCursor <= cursorTouchRadius) {
-                    isDraggingCursor = true
-                    isUserInteracting = true
-                    lastInteractionTime = System.currentTimeMillis()
-                    return true
+                    touchState = TouchState.DraggingCursor
                 }
 
                 return true
@@ -265,49 +269,83 @@ class KeyFrameTimelineView @JvmOverloads constructor(
                 distanceX: Float,
                 distanceY: Float,
             ): Boolean {
-                if (isDraggingKeyFrame) {
-                    // 拖拽关键帧：根据手指移动距离更新关键帧时间
-                    // distanceX 是手指移动的像素距离（正值=向左滑动），需要转换到时间
-                    val adapter = adapter ?: return false
-                    val durationMs = adapter.getDuration().toFloat()
-                    if (durationMs <= 0 || trackWidth <= 0) return false
+                val adapter = adapter ?: return false
+                val durationMs = adapter.getDuration()
+                if (durationMs <= 0 || trackWidth <= 0) return false
 
-                    // 像素位移转时间偏移
-                    val timePerPixel = durationMs / trackWidth
-                    val timeDelta = (-distanceX * timePerPixel).toLong()
+                when (val state = touchState) {
+                    // === 关键帧拖动中 ===
+                    is TouchState.DraggingKeyFrame -> {
+                        val keyFrames = adapter.getKeyFrames()
+                        val currentIndex = keyFrames.indexOfFirst { it.timeMs == state.timeMs }
+                        if (currentIndex < 0) return false
 
-                    val newTimeMs = (draggedKeyFrameOriginalTime + timeDelta)
-                        .coerceAtLeast(0L)
+                        val timePerPixel = durationMs.toFloat() / trackWidth
+                        val totalDx = e2.x - state.startRawX
+                        val virtualTimeMs = (state.startTimeMs + totalDx * timePerPixel)
+                            .toLong()
+                            .coerceIn(0L, durationMs)
 
-                    // 通知 adapter 时间变更
-                    adapter.onKeyFrameTimeChanged(draggedKeyFrameOriginalTime, newTimeMs)
-                    // 更新本地跟踪的原始时间，使后续增量正确
-                    draggedKeyFrameOriginalTime = newTimeMs
+                        val collides = keyFrames.any { other ->
+                            other !== keyFrames[currentIndex] &&
+                                abs(other.timeMs - virtualTimeMs) < COLLISION_THRESHOLD_MS
+                        }
+                        if (collides) {
+                            android.util.Log.d(TAG, "keyframe collision, virtualTime=$virtualTimeMs frozen, keys=${keyFrames.map { it.timeMs }}")
+                            ViewCompat.postInvalidateOnAnimation(this@KeyFrameTimelineView)
+                            return true
+                        }
 
-                    ViewCompat.postInvalidateOnAnimation(this@KeyFrameTimelineView)
-                    return true
-                }
+                        adapter.onKeyFrameTimeChanged(currentIndex, virtualTimeMs)
+                        touchState = state.copy(timeMs = virtualTimeMs)
 
-                // 判断是否为水平滑动手势
-                val isHorizontalScroll = abs(distanceX) > abs(distanceY) * 1.5f && abs(distanceX) > 8f
+                        val newIndex = adapter.getKeyFrames().indexOfFirst { it.timeMs == virtualTimeMs }
+                        if (newIndex >= 0) {
+                            selectedKeyFrameIndex = newIndex
+                        }
 
-                if (isDraggingCursor || (isHorizontalScroll && e1 != null)) {
-                    if (!isDraggingCursor && e1 != null) {
-                        val xInPadding = e1.x - paddingLeft
-                        val newCursorX = (xInPadding - trackPadding).coerceIn(0f, trackWidth)
-                        cursorX = newCursorX
-                        isDraggingCursor = true
-                        isUserInteracting = true
+                        ViewCompat.postInvalidateOnAnimation(this@KeyFrameTimelineView)
+                        return true
                     }
 
-                    // 拖拽光标
-                    cursorX -= distanceX
-                    clampCursor()
-                    updateCurrentTimeFromCursor()
-                    ViewCompat.postInvalidateOnAnimation(this@KeyFrameTimelineView)
-                    return true
+                    // === 光标拖动中 ===
+                    is TouchState.DraggingCursor -> {
+                        cursorX -= distanceX
+                        clampCursor()
+                        updateCurrentTimeFromCursor()
+                        ViewCompat.postInvalidateOnAnimation(this@KeyFrameTimelineView)
+                        return true
+                    }
+
+                    // === Idle → 判断是否启动拖动 ===
+                    is TouchState.Idle -> {
+                        // 手指按在已选中关键帧上 → 启动关键帧拖动
+                        if (touchedSelectedKeyFrame && selectedKeyFrameIndex != null) {
+                            val keyFrames = adapter.getKeyFrames()
+                            val kfTimeMs = keyFrames.getOrNull(selectedKeyFrameIndex!!)?.timeMs ?: return false
+                            touchState = TouchState.DraggingKeyFrame(
+                                timeMs = kfTimeMs,
+                                startTimeMs = kfTimeMs,
+                                startRawX = e2.x,
+                            )
+                            touchedSelectedKeyFrame = false
+                            android.util.Log.d(TAG, "start dragging keyframe at ${kfTimeMs}ms, startRawX=${e2.x}")
+                            return true
+                        }
+
+                        // 水平滑动 → 光标拖动（onDown 未命中光标但滑动意图明确）
+                        val isHorizontalScroll = abs(distanceX) > abs(distanceY) * 1.5f && abs(distanceX) > 8f
+                        if (isHorizontalScroll && e1 != null) {
+                            val xInPadding = e1.x - paddingLeft
+                            val newCursorX = (xInPadding - trackPadding).coerceIn(0f, trackWidth)
+                            cursorX = newCursorX
+                            isUserInteracting = true
+                            touchState = TouchState.DraggingCursor
+                            return true
+                        }
+                        return false
+                    }
                 }
-                return false
             }
 
             override fun onLongPress(e: MotionEvent) {
@@ -315,23 +353,37 @@ class KeyFrameTimelineView @JvmOverloads constructor(
             }
 
             override fun onSingleTapUp(e: MotionEvent): Boolean {
-                if (!isDraggingCursor && !isDraggingKeyFrame) {
-                    // 优先检查是否点击了关键帧
-                    val hitFrame = findKeyFrameAtPosition(e.x, e.y)
-                    if (hitFrame != null) {
-                        selectedKeyFrame = hitFrame
-                        adapter?.onKeyFrameSelected(hitFrame)
-                        invalidate()
+                // 拖动结束后的松手不算点击
+                if (touchState != TouchState.Idle) {
+                    touchedSelectedKeyFrame = false
+                    postInteractionCooldown()
+                    return super.onSingleTapUp(e)
+                }
+
+                val hitIndex = findKeyFrameAtPosition(e.x, e.y)
+                if (hitIndex != null) {
+                    if (selectedKeyFrameIndex == hitIndex) {
+                        // 再次点击已选中关键帧 → 取消选中
+                        selectedKeyFrameIndex = null
+                        adapter?.onKeyFrameTouchSelected(null)
                     } else {
-                        // 点击轨道跳转光标
-                        val drawHeight = height - paddingTop - paddingBottom
-                        val centerY = drawHeight / 2f + paddingTop
-                        if (abs(e.y - centerY) < dp24) {
-                            handleTrackTap(e.x)
-                        }
+                        // 选中新关键帧
+                        selectedKeyFrameIndex = hitIndex
+                        adapter?.onKeyFrameSelected(hitIndex)
+                        adapter?.onKeyFrameTouchSelected(hitIndex)
+                    }
+                    invalidate()
+                } else {
+                    // 点击轨道空白处 → 跳转光标
+                    val drawHeight = height - paddingTop - paddingBottom
+                    val centerY = drawHeight / 2f + paddingTop
+                    if (abs(e.y - centerY) < dp24) {
+                        handleTrackTap(e.x)
                     }
                 }
-                resetInteractionLock()
+
+                touchedSelectedKeyFrame = false
+                postInteractionCooldown()
                 return super.onSingleTapUp(e)
             }
         },
@@ -492,12 +544,13 @@ class KeyFrameTimelineView @JvmOverloads constructor(
 
         // ==================== 4. 绘制关键帧 ====================
         val keyFrames = adapter.getKeyFrames()
-        keyFrames.forEach { timeMs ->
+        for (i in keyFrames.indices) {
+            val timeMs = keyFrames[i].timeMs
             val ratio = timeMs / durationMs
             val drawX = trackPadding + ratio * trackWidth
 
             if (drawX in -dp32..drawWidth + dp32) {
-                val isSelected = selectedKeyFrame == timeMs
+                val isSelected = selectedKeyFrameIndex == i
                 val keyFrameRadius = if (isSelected) dp10 else dp6
 
                 keyFrameGlowPaint.color = cursorColor
@@ -562,16 +615,10 @@ class KeyFrameTimelineView @JvmOverloads constructor(
             MotionEvent.ACTION_UP,
             MotionEvent.ACTION_CANCEL,
             -> {
-                if (isDraggingCursor) {
-                    isDraggingCursor = false
+                touchedSelectedKeyFrame = false
+                if (touchState != TouchState.Idle) {
+                    postInteractionCooldown()
                 }
-                if (isDraggingKeyFrame) {
-                    isDraggingKeyFrame = false
-                }
-                // 取消之前的 runnable
-                resetInteractionRunnable?.let { removeCallbacks(it) }
-                resetInteractionRunnable = Runnable { resetInteractionLock() }
-                postDelayed(resetInteractionRunnable, INTERACTION_COOLDOWN_MS)
             }
         }
         return gestureDetector.onTouchEvent(event)
@@ -599,9 +646,8 @@ class KeyFrameTimelineView @JvmOverloads constructor(
         val currentTime = (progress * durationMs).toLong().coerceIn(0, adapter.getDuration().toLong())
 
         val keyFrames = adapter.getKeyFrames()
-        selectedKeyFrame = keyFrames.minByOrNull { abs(it - currentTime) }?.takeIf {
-            abs(it - currentTime) < 100
-        }
+        val nearestIndex = keyFrames.indices.minByOrNull { abs(keyFrames[it].timeMs - currentTime) }
+        selectedKeyFrameIndex = nearestIndex?.takeIf { abs(keyFrames[it].timeMs - currentTime) < COLLISION_THRESHOLD_MS }
 
         adapter.onSeekTo(currentTime)
     }
@@ -630,21 +676,16 @@ class KeyFrameTimelineView @JvmOverloads constructor(
         val durationMs = adapter.getDuration().toFloat()
         if (durationMs <= 0) return
 
-        // 转换坐标到 padding 内部
         val drawHeight = height - paddingTop - paddingBottom
         val centerY = drawHeight / 2f + paddingTop
 
-        // 检查是否触摸到某个关键帧（使用类字段 keyFrameTouchRadius）
-        for (timeMs in keyFrames) {
-            val ratio = timeMs / durationMs
+        for (i in keyFrames.indices) {
+            val ratio = keyFrames[i].timeMs / durationMs
             val drawX = paddingLeft + trackPadding + ratio * trackWidth
-
-            // 计算触摸点到关键帧中心的距离
             val distance = sqrt((x - drawX).pow(2) + (y - centerY).pow(2))
 
             if (distance <= keyFrameTouchRadius) {
-                // 触摸到关键帧，触发长按回调
-                adapter.onKeyFrameLongPress(timeMs)
+                adapter.onKeyFrameLongPress(i)
                 return
             }
         }
@@ -652,11 +693,9 @@ class KeyFrameTimelineView @JvmOverloads constructor(
 
     /**
      * 查找触摸位置附近的关键帧
-     * @param x 触摸点的屏幕 x 坐标
-     * @param y 触摸点的屏幕 y 坐标
-     * @return 关键帧时间（毫秒），如果未找到则返回 null
+     * @return 关键帧在列表中的 index，如果未找到则返回 null
      */
-    private fun findKeyFrameAtPosition(x: Float, y: Float): Long? {
+    private fun findKeyFrameAtPosition(x: Float, y: Float): Int? {
         val adapter = adapter ?: return null
         val keyFrames = adapter.getKeyFrames()
         if (keyFrames.isEmpty()) return null
@@ -667,24 +706,27 @@ class KeyFrameTimelineView @JvmOverloads constructor(
         val drawHeight = height - paddingTop - paddingBottom
         val centerY = drawHeight / 2f + paddingTop
 
-        for (timeMs in keyFrames) {
-            val ratio = timeMs / durationMs
+        for (i in keyFrames.indices) {
+            val ratio = keyFrames[i].timeMs / durationMs
             val drawX = paddingLeft + trackPadding + ratio * trackWidth
 
             val distance = sqrt((x - drawX).pow(2) + (y - centerY).pow(2))
 
             if (distance <= keyFrameTouchRadius) {
-                return timeMs
+                return i
             }
         }
         return null
     }
 
-    private fun resetInteractionLock() {
-        isUserInteracting = false
-        if (!isDraggingKeyFrame && !isDraggingCursor) {
-            // 重置交互锁定时不重置拖拽状态
+    private fun postInteractionCooldown() {
+        // 延迟重置 touchState 和交互锁，阻止此期间的 seekToTime
+        resetInteractionRunnable?.let { removeCallbacks(it) }
+        resetInteractionRunnable = Runnable {
+            touchState = TouchState.Idle
+            isUserInteracting = false
         }
+        postDelayed(resetInteractionRunnable, INTERACTION_COOLDOWN_MS)
     }
 
     // ==================== 公共方法 ====================
@@ -721,10 +763,13 @@ class KeyFrameTimelineView @JvmOverloads constructor(
      * @param timeMs 关键帧时间，传 null 取消选中
      */
     fun selectKeyFrame(timeMs: Long?) {
-        selectedKeyFrame = timeMs
         if (timeMs != null) {
+            val keyFrames = adapter?.getKeyFrames() ?: emptyList()
+            val index = keyFrames.indexOfFirst { it.timeMs == timeMs }
+            selectedKeyFrameIndex = if (index >= 0) index else null
             seekToTime(timeMs)
         } else {
+            selectedKeyFrameIndex = null
             invalidate()
         }
     }
@@ -772,26 +817,32 @@ class KeyFrameTimelineView @JvmOverloads constructor(
     interface TimelineAdapter {
         fun getDuration(): Long
         fun getCurrentPosition(): Long
-        fun getKeyFrames(): List<Long>
+        fun getKeyFrames(): List<KeyFrame>
         fun onSeekTo(position: Long)
 
         /**
          * 点击关键帧圆点时调用
-         * @param keyFrameTime 被点击的关键帧时间
+         * @param index 关键帧在列表中的 index
          */
-        fun onKeyFrameSelected(keyFrameTime: Long) {}
+        fun onKeyFrameSelected(index: Int) {}
 
         /**
          * 长按关键帧时调用，用于打开编辑面板
-         * @param keyFrameTime 被长按的关键帧时间
+         * @param index 关键帧在列表中的 index
          */
-        fun onKeyFrameLongPress(keyFrameTime: Long) {}
+        fun onKeyFrameLongPress(index: Int) {}
 
         /**
          * 拖拽关键帧到新时间位置时调用
-         * @param oldTimeMs 原始时间
+         * @param index 关键帧在列表中的 index
          * @param newTimeMs 新时间
          */
-        fun onKeyFrameTimeChanged(oldTimeMs: Long, newTimeMs: Long) {}
+        fun onKeyFrameTimeChanged(index: Int, newTimeMs: Long) {}
+
+        /**
+         * 触摸选中/取消选中关键帧时调用（通知外部更新状态显示）
+         * @param index 关键帧在列表中的 index，null 表示取消选中
+         */
+        fun onKeyFrameTouchSelected(index: Int?) {}
     }
 }

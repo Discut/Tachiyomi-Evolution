@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:minHeight="400dp"
     android:orientation="vertical"
     android:paddingHorizontal="16dp"
@@ -11,21 +11,39 @@
     android:paddingBottom="24dp">
 
     <!-- 标题栏：名称 + 操作按钮 -->
-    <LinearLayout
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:layout_height="wrap_content">
 
-        <TextView
-            android:id="@+id/kf_title"
+        <LinearLayout
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:textColor="?attr/colorOnBackground"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            tools:text="关键帧编辑: 2.5s" />
+            android:orientation="vertical"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:layout_constraintRight_toLeftOf="@id/kf_btn_delete"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <TextView
+                android:id="@+id/kf_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="?attr/colorOnBackground"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:text="编辑面板"/>
+
+            <TextView
+                android:id="@+id/kf_sub_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="7dp"
+                android:textColor="?attr/colorOnBackground"
+                android:textSize="12sp"
+                android:textStyle="normal"
+                tools:text="这是一个副标题" />
+        </LinearLayout>
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/kf_btn_delete"
@@ -33,7 +51,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="删除"
-            android:textSize="12sp" />
+            android:textSize="12sp"
+            app:layout_constraintBottom_toBottomOf="@+id/kf_btn_copy"
+            app:layout_constraintRight_toLeftOf="@id/kf_btn_copy"
+            app:layout_constraintTop_toTopOf="@+id/kf_btn_copy" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/kf_btn_copy"
@@ -41,8 +62,11 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="复制"
-            android:textSize="12sp" />
-    </LinearLayout>
+            android:textSize="12sp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintRight_toRightOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
     <View
         android:layout_width="match_parent"
@@ -54,6 +78,7 @@
 
     <!-- 快捷操作栏：捕获当前状态 + 重置全部 -->
     <LinearLayout
+        android:id="@+id/ll_action_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="8dp"
@@ -77,13 +102,7 @@
             android:textSize="12sp" />
     </LinearLayout>
 
-    <!-- 属性滑块区域 -->
-    <androidx.core.widget.NestedScrollView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:fillViewport="false">
-
-        <LinearLayout
+    <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -92,6 +111,7 @@
 
             <!-- Position X -->
             <LinearLayout
+                android:id="@+id/ll_slider_pos_x"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
@@ -139,6 +159,7 @@
 
             <!-- Position Y -->
             <LinearLayout
+                android:id="@+id/ll_slider_pos_y"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
@@ -186,6 +207,7 @@
 
             <!-- Scale -->
             <LinearLayout
+                android:id="@+id/ll_slider_scale"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
@@ -233,6 +255,7 @@
 
             <!-- Rotation -->
             <LinearLayout
+                android:id="@+id/ll_slider_rotation"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
@@ -280,6 +303,7 @@
 
             <!-- Alpha (透明度) -->
             <LinearLayout
+                android:id="@+id/ll_slider_alpha"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
@@ -326,9 +350,9 @@
             </LinearLayout>
 
         </LinearLayout>
-    </androidx.core.widget.NestedScrollView>
 
     <View
+        android:id="@+id/view_divider"
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginTop="12dp"

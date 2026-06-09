@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.reader.slide.sheet
 
 import android.app.Activity
 import android.os.Bundle
+import androidx.core.view.isVisible
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import eu.kanade.tachiyomi.databinding.KeyframeEditSheetBinding
 import eu.kanade.tachiyomi.ui.reader.slide.engine.ImageViewState
@@ -23,6 +24,7 @@ class KeyframeEditSheet(
     private val onDuplicateRequested: (Long) -> Unit,
     private val onDurationChanged: (Long) -> Unit,
     private val onCatchRequested: (Long) -> Unit,
+    private val isEmptyKeyFrames: Boolean = false,
 ) : BottomSheetDialog(activity) {
 
     companion object {
@@ -49,6 +51,7 @@ class KeyframeEditSheet(
         super.onCreate(savedInstanceState)
         setContentView(binding.root)
 
+        initContainer()
         initSliders()
         initButtons()
         initResetButtons()
@@ -56,6 +59,19 @@ class KeyframeEditSheet(
         // 设置初始值
         updateTimeLabel()
         updateSliderValues(currentState)
+    }
+
+    private fun initContainer() {
+        binding.llActionContainer.isVisible = !isEmptyKeyFrames
+        binding.llSliderAlpha.isVisible = !isEmptyKeyFrames
+        binding.llSliderScale.isVisible = !isEmptyKeyFrames
+        binding.llSliderRotation.isVisible = !isEmptyKeyFrames
+        binding.llSliderPosX.isVisible = !isEmptyKeyFrames
+        binding.llSliderPosY.isVisible = !isEmptyKeyFrames
+
+        binding.viewDivider.isVisible = !isEmptyKeyFrames
+
+        binding.kfSubTitle.isVisible = !isEmptyKeyFrames
     }
 
     private fun initSliders() {
@@ -108,11 +124,13 @@ class KeyframeEditSheet(
     }
 
     private fun initButtons() {
+        binding.kfBtnDelete.isVisible = !isEmptyKeyFrames
         binding.kfBtnDelete.setOnClickListener {
             onDeleteRequested(currentTimeMs)
             dismiss()
         }
 
+        binding.kfBtnCopy.isVisible = !isEmptyKeyFrames
         binding.kfBtnCopy.setOnClickListener {
             onDuplicateRequested(currentTimeMs)
             dismiss()
@@ -264,7 +282,7 @@ class KeyframeEditSheet(
     }
 
     private fun updateTimeLabel() {
-        binding.kfTitle.text = "关键帧编辑: ${(currentTimeMs.toFloat() / 1000f).format(1)}s"
+        binding.kfSubTitle.text = "关键帧编辑: ${(currentTimeMs.toFloat() / 1000f).format(1)}s"
     }
 
     private fun updateSliderValues(state: ImageViewState) {

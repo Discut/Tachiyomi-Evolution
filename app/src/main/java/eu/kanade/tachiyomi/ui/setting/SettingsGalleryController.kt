@@ -136,6 +136,15 @@ class SettingsGalleryController : SettingsController() {
         }
 
         preferenceCategory {
+            titleRes = R.string.tag_settings
+
+            preference {
+                key = "gallery_tag_filter"
+
+            }
+        }
+
+        preferenceCategory {
             titleRes = R.string.backup
 
             preference {

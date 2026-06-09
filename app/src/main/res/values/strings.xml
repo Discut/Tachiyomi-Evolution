@@ -1232,6 +1232,8 @@
     <string name="merge">Merge</string>
     <string name="cannot_merge">Cannot merge, images are not the same</string>
     <string name="cannot_split">Cannot split, no difference image selected</string>
+    <string name="tag_settings">Tag Settings</string>
+    <string name="ai_tags_filter">Filter for ai tags</string>
 
 
 
